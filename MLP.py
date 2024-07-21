@@ -54,6 +54,7 @@ class MLP(object):
         self.W_h = rng.normal(scale=self.sigma, size=(self.N, num_inputs+1))  # input-to-hidden weights & bias
         self.W_y = rng.normal(scale=self.sigma, size=(num_outputs, self.N + 1))  # hidden-to-output weights & bias
         self.B = rng.normal(scale=self.sigma, size=(self.N, num_outputs))  
+
     def _store_initial_weights_biases(self):
         """
         Stores a copy of the network's initial weights and biases.
@@ -322,11 +323,116 @@ class MLP(object):
         return (losses, accuracy, test_loss, snr)
     
 
-   
+    def train_nonstat_data(self, rng, images, labels, num_epochs, test_images, test_labels, learning_rate=0.01, batch_size=20, \
+              algorithm='backprop', noise=1.0, report=False, report_rate=10):
+        """
+        Trains the network with algorithm in batches for the given number of epochs on the data provided.
+
+        Uses batches with size as indicated by batch_size and given learning rate.
+
+        For perturbation methods, uses SD of noise as given.
+
+        Categorization accuracy on a test set is also calculated.
+
+        Prints a message every report_rate epochs if requested.
+
+        Returns an array of the losses achieved at each epoch (and accuracies if test data given).
+        """
+
+
+        '''
+        ideas: 
+        - give data sorted according to non-stationary distribution
+        - sort data in this method and then use it accordingly
+        - parameter depending on non-stationarity type
+        '''
+
+
+        # sort data here
+        # 50/50 split
+        in_first_half = [1 if labels[i] < 5 else 0 for i in range(images.shape[1])]
+        images_first_half = images[:, np.where(in_first_half)[0]]
+        labels_first_half = labels[:, np.where(in_first_half)[0]]
+        images_second_half = images[:, np.where(1 - np.array(in_first_half))[0]] # unsure about this notation
+        labels_second_half = labels[:, np.where(1 - np.array(in_first_half))[0]]
+
+
+
+        # provide an output message
+        if report:
+            print("Training starting...")
+
+        # make batches from the data
+        batches_1 = create_batches(rng, batch_size, images_first_half.shape[1])
+        batches_2 = create_batches(rng, batch_size, images_second_half.shape[1])
+
+        # create arrays to store loss and accuracy values
+        losses = np.zeros((num_epochs * (batches_1.shape[0] + batches_2.shape[0]),))
+        accuracy = np.zeros((num_epochs,))
+        test_loss = np.zeros((num_epochs,))
+        cosine_similarity = np.zeros((num_epochs,))
+
+        # estimate the gradient SNR on the test set
+        grad = np.zeros((test_images.shape[1], *self.W_h.shape))
+        for t in range(test_images.shape[1]):
+            inputs = test_images[:, [t]]
+            targets = test_labels[:, [t]]
+            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+        snr = calculate_grad_snr(grad)
+
+        # run the training for the given number of epochs
+        update_counter = 0
+        first_half = 1
+        for epoch in range(num_epochs):
+            if first_half:
+                images = images_first_half # .copy()?
+                labels = labels_first_half
+                batches = batches_1
+            else:
+                images = images_second_half
+                labels = labels_second_half
+                batches = batches_2
+
+            # step through each batch
+            for b in range(batches.shape[0]):
+                # get the inputs and targets for this batch
+                inputs = images[:, batches[b, :]]
+                targets = labels[:, batches[b, :]]
+
+                # calculate the current loss
+                losses[update_counter] = self.mse_loss(rng, inputs, targets)
+
+                # update the weights
+                self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
+                update_counter += 1
+
+            # calculate the current test accuracy
+            (testhid, testout) = self.inference(rng, test_images)
+            accuracy[epoch] = calculate_accuracy(testout, test_labels)
+            test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
+            grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+            grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+            cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
+
+            # print an output message every 10 epochs
+            if report and np.mod(epoch + 1, report_rate) == 0:
+                print("...completed ", epoch + 1,
+                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2), ".")
+                
+            if epoch == num_epochs/2:
+                first_half = 0
+
+
+        # provide an output message
+        if report:
+            print("Training complete.")
+
+        return (losses, accuracy, test_loss, snr)
+    
 
     def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
         """
-        Trains the network with online algorithm.
+        Trains the network with online learning algorithm.
 
         For perturbation methods, uses SD of noise as given.
 
