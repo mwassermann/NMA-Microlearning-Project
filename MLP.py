@@ -419,7 +419,7 @@ class MLP(object):
                 print("...completed ", epoch + 1,
                       " epochs of training. Current loss: ", round(losses[update_counter - 1], 2), ".")
                 
-            if epoch == num_epochs/2:
+            if epoch == int(num_epochs/2):
                 first_half = 0
 
 
