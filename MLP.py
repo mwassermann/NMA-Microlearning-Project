@@ -321,6 +321,85 @@ class MLP(object):
 
         return (losses, accuracy, test_loss, snr)
     
+
+   
+
+    def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
+        """
+        Trains the network with online algorithm.
+
+        For perturbation methods, uses SD of noise as given.
+
+        Categorization accuracy on a test set is also calculated.
+
+        Prints a message every report_rate iterations if requested.
+
+        Returns an array of the losses achieved every x number of iterations (and accuracies if test data given).
+        """
+
+        # provide an output message
+        if report:
+            print("Training starting...")
+
+        losses = []
+        accuracy = []
+        test_loss = []
+        cosine_similarity = []
+
+        # estimate the gradient SNR on the test set
+        grad = np.zeros((test_images.shape[1], *self.W_h.shape))
+        for t in range(test_images.shape[1]):
+            inputs = test_images[:, [t]]
+            targets = test_labels[:, [t]]
+            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+        snr = calculate_grad_snr(grad)
+
+        converged = False
+        update_counter = 0
+        while not converged:
+            t = rng.integers(images.shape[1]) # choose a random image
+            inputs = images[:, [t]]
+            targets = labels[:, [t]]
+
+            # calculate the current loss
+            loss = self.mse_loss(rng, inputs, targets)
+
+            # store the loss
+            if update_counter % report_rate == 0:
+                losses.append(loss)  
+
+                # calculate the accuracy on the test set
+                # accuracy.append(calculate_accuracy(self, rng, test_images, test_labels, noise=noise))
+                # cosine_similarity.append(calculate_cosine_similarity(self, rng, test_images, test_labels, noise=noise))
+
+                # calculate the current test accuracy
+                (testhid, testout) = self.inference(rng, test_images)
+                accuracy.append(calculate_accuracy(testout, test_labels))
+                test_loss.append(self.mse_loss(rng, test_images, test_labels))
+                grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+                grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+                cosine_similarity.append(calculate_cosine_similarity(grad_test, grad_bp))
+
+                # print an output message every 100 iterations
+                if report and np.mod(update_counter + 1, report_rate) == 0:
+                    print("...completed ", update_counter + 1,
+                            " iterations of training data (single images). Current loss: ", round(losses[update_counter - 1], 2), ".")
+
+            # check for convergence
+            if loss < conv_loss:
+                converged = True
+
+            # update the weights
+            self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
+            update_counter += 1      
+        
+
+        # provide an output message
+        if report:
+            print("Training complete.")
+
+        return (losses, accuracy, test_loss, snr)
+    
 class NodePerturbMLP(MLP):
     """
     A multilayer perceptron that is capable of learning through node perturbation
