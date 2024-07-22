@@ -286,6 +286,7 @@ class MLP(object):
             targets = test_labels[:, [t]]
             grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr = calculate_grad_snr(grad)
+
         # run the training for the given number of epochs
         update_counter = 0
         for epoch in range(num_epochs):
@@ -311,9 +312,9 @@ class MLP(object):
             grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
             cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
 
-            # print an output message every 10 epochs
+            # print an output message every report_rate epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
-                print("...completed ", epoch + 1,
+                print("...completed ", (epoch + 1)/report_rate,
                       " epochs of training. Current loss: ", round(losses[update_counter - 1], 2), ".")
 
         # provide an output message
@@ -350,7 +351,7 @@ class MLP(object):
 
         # sort data here
         # 50/50 split
-        in_first_half = [1 if labels[i] < 5 else 0 for i in range(images.shape[1])]
+        in_first_half = [1 if sum(labels[0:4, i]) == 1 else 0 for i in range(images.shape[1])]
         images_first_half = images[:, np.where(in_first_half)[0]]
         labels_first_half = labels[:, np.where(in_first_half)[0]]
         images_second_half = images[:, np.where(1 - np.array(in_first_half))[0]] # unsure about this notation
@@ -430,7 +431,7 @@ class MLP(object):
         return (losses, accuracy, test_loss, snr)
     
 
-    def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
+    def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, max_it=None, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
         """
         Trains the network with online learning algorithm.
 
@@ -462,17 +463,18 @@ class MLP(object):
 
         converged = False
         update_counter = 0
-        while not converged:
+        while not converged and (max_it is None or update_counter < max_it):
             t = rng.integers(images.shape[1]) # choose a random image
             inputs = images[:, [t]]
             targets = labels[:, [t]]
 
             # calculate the current loss
             loss = self.mse_loss(rng, inputs, targets)
+            losses.append(loss)  
 
             # store the loss
-            if update_counter % report_rate == 0:
-                losses.append(loss)  
+            if update_counter % report_rate/10 == 0:
+                # losses.append(loss)  
 
                 # calculate the accuracy on the test set
                 # accuracy.append(calculate_accuracy(self, rng, test_images, test_labels, noise=noise))
@@ -486,14 +488,17 @@ class MLP(object):
                 grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
                 cosine_similarity.append(calculate_cosine_similarity(grad_test, grad_bp))
 
-                # print an output message every 100 iterations
-                if report and np.mod(update_counter + 1, report_rate) == 0:
-                    print("...completed ", update_counter + 1,
-                            " iterations of training data (single images). Current loss: ", round(losses[update_counter - 1], 2), ".")
+            # print an output message every 100 iterations
+            if report and np.mod(update_counter+1, report_rate*10) == 0:
+                print("...completed ", (update_counter + 1),
+                        " iterations of training data (single images). Current loss: ", round(losses[-1], 2), ".")
 
             # check for convergence
             if loss < conv_loss:
                 converged = True
+                losses.append(loss)  
+                print("...completed ", (update_counter + 1),
+                        " iterations of training data (single images). Current loss: ", round(losses[-1], 2), ".")
 
             # update the weights
             self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
