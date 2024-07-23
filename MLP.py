@@ -248,10 +248,38 @@ class MLP(object):
         # do the updates
         self.W_h += eta * delta_W_h
         self.W_y += eta * delta_W_y
+    
+    def alter_inputs(self, train,type=None):
+        if type == "gauss":
+            row = len(train)
+            mean = 0
+            var = 0.1
+            sigma = var**0.5
+            for i in range(train.shape[1]):
+                gauss = np.random.normal(mean,sigma,(row))
+                noisy = train[:,i] + gauss
+                train[:,i] = noisy
+
+        elif type == 's&p':
+            amount=0.04
+            s_vs_p=0.5
+            total_pixels = train.shape[0]
+            for i in range(train.shape[1]):
+                out = np.copy(train[:,i])
+                num_salt = np.ceil(amount * total_pixels * s_vs_p).astype(int)
+                salt_indices = np.random.randint(0, total_pixels, num_salt)
+                out[salt_indices] = 1
+                    # Pepper mode
+                num_pepper = np.ceil(amount * total_pixels * (1 - s_vs_p)).astype(int)
+                pepper_indices = np.random.randint(0, total_pixels, num_pepper)
+                out[pepper_indices] = 0
+                train[:,i] = out
+        
+        return train
 
     # train the network using the update functions
     def train(self, rng, images, labels, num_epochs, test_images, test_labels, learning_rate=0.01, batch_size=20, \
-              algorithm='backprop', noise=1.0, report=False, report_rate=10):
+              algorithm='backprop', noise=1.0, noise_type=None, report=False, report_rate=10):
         """
         Trains the network with algorithm in batches for the given number of epochs on the data provided.
 
@@ -289,6 +317,11 @@ class MLP(object):
             grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr = calculate_grad_snr(grad)
 
+        if noise_type in ['gauss', 's&p']:
+            inputs = self.alter_inputs(np.copy(images), noise_type)
+        else: 
+            inputs = images
+
         # run the training for the given number of epochs
         update_counter = 0
         for epoch in range(num_epochs):
@@ -296,14 +329,14 @@ class MLP(object):
             # step through each batch
             for b in range(batches.shape[0]):
                 # get the inputs and targets for this batch
-                inputs = images[:, batches[b, :]]
+                batch_input = inputs[:, batches[b, :]]
                 targets = labels[:, batches[b, :]]
 
                 # calculate the current loss
-                losses[update_counter] = self.mse_loss(rng, inputs, targets)
+                losses[update_counter] = self.mse_loss(rng, batch_input, targets)
 
                 # update the weights
-                self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
+                self.update(rng, batch_input, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
                 update_counter += 1
 
             # calculate the current test accuracy
