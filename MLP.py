@@ -266,6 +266,8 @@ class MLP(object):
         Returns an array of the losses achieved at each epoch (and accuracies if test data given).
         """
 
+        if algorithm == 'node_perturb':
+            print('helloooooo, I am able to print, tada!!!')
         # provide an output message
         if report:
             print("Training starting...")
@@ -315,7 +317,7 @@ class MLP(object):
             # print an output message every report_rate epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
                 print("...completed ", (epoch + 1)/report_rate,
-                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2), ".")
+                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2))
 
         # provide an output message
         if report:
@@ -354,9 +356,8 @@ class MLP(object):
         in_first_half = [1 if sum(labels[0:4, i]) == 1 else 0 for i in range(images.shape[1])]
         images_first_half = images[:, np.where(in_first_half)[0]]
         labels_first_half = labels[:, np.where(in_first_half)[0]]
-        images_second_half = images[:, np.where(1 - np.array(in_first_half))[0]] # unsure about this notation
-        labels_second_half = labels[:, np.where(1 - np.array(in_first_half))[0]]
-
+        images_second_half = images # [:, np.where(1 - np.array(in_first_half))[0]] 
+        labels_second_half = labels # [:, np.where(1 - np.array(in_first_half))[0]]
 
 
         # provide an output message
@@ -368,7 +369,7 @@ class MLP(object):
         batches_2 = create_batches(rng, batch_size, images_second_half.shape[1])
 
         # create arrays to store loss and accuracy values
-        losses = np.zeros((num_epochs * (batches_1.shape[0] + batches_2.shape[0]),))
+        losses = np.zeros((num_epochs * (batches_2.shape[0]),)) # size of backprop vector
         accuracy = np.zeros((num_epochs,))
         test_loss = np.zeros((num_epochs,))
         cosine_similarity = np.zeros((num_epochs,))
@@ -386,7 +387,7 @@ class MLP(object):
         first_half = 1
         for epoch in range(num_epochs):
             if first_half:
-                images = images_first_half # .copy()?
+                images = images_first_half 
                 labels = labels_first_half
                 batches = batches_1
             else:
@@ -407,6 +408,9 @@ class MLP(object):
                 self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
                 update_counter += 1
 
+                if update_counter == losses.shape[0]:
+                    break
+
             # calculate the current test accuracy
             (testhid, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
@@ -418,7 +422,7 @@ class MLP(object):
             # print an output message every 10 epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
                 print("...completed ", epoch + 1,
-                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2), ".")
+                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2))
                 
             if epoch == int(num_epochs/2):
                 first_half = 0
@@ -463,22 +467,17 @@ class MLP(object):
 
         converged = False
         update_counter = 0
-        while not converged and (max_it is None or update_counter < max_it):
+        while not converged and (max_it is None or int(update_counter/report_rate) < max_it):
             t = rng.integers(images.shape[1]) # choose a random image
             inputs = images[:, [t]]
             targets = labels[:, [t]]
 
             # calculate the current loss
             loss = self.mse_loss(rng, inputs, targets)
-            losses.append(loss)  
 
-            # store the loss
-            if update_counter % report_rate/10 == 0:
-                # losses.append(loss)  
-
-                # calculate the accuracy on the test set
-                # accuracy.append(calculate_accuracy(self, rng, test_images, test_labels, noise=noise))
-                # cosine_similarity.append(calculate_cosine_similarity(self, rng, test_images, test_labels, noise=noise))
+            # store the loss every report_rate samples, should be batchsize to be comparable to other methods
+            if update_counter % report_rate == 0:
+                losses.append(loss)  
 
                 # calculate the current test accuracy
                 (testhid, testout) = self.inference(rng, test_images)
@@ -489,16 +488,16 @@ class MLP(object):
                 cosine_similarity.append(calculate_cosine_similarity(grad_test, grad_bp))
 
             # print an output message every 100 iterations
-            if report and np.mod(update_counter+1, report_rate*10) == 0:
+            if report and np.mod(update_counter+1, images.shape[1]) == 0: # report_rate*10
                 print("...completed ", (update_counter + 1),
-                        " iterations of training data (single images). Current loss: ", round(losses[-1], 2), ".")
+                        " iterations (corresponding to 1 epoch) of training data (single images). Current loss: ", round(losses[-1], 4), ".")
 
             # check for convergence
             if loss < conv_loss:
                 converged = True
                 losses.append(loss)  
                 print("...completed ", (update_counter + 1),
-                        " iterations of training data (single images). Current loss: ", round(losses[-1], 2), ".")
+                        " iterations of training data (single images). Current loss: ", round(losses[-1], 4))
 
             # update the weights
             self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
