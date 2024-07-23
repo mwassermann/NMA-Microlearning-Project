@@ -52,7 +52,7 @@ class MLP(object):
         #self.B = rng.normal(scale=self.sigma, size=(self.num_hidden, num_outputs))  # feedback weights
 
         self.W_h_1 = rng.normal(scale=self.sigma, size=(self.N, num_inputs+1))  # input-to-hidden weights & bias
-        self.W_h_2 = rng.normal(scale=self.sigma, size=(self.N, self.N))  # hidden-to-hidden weights & bias
+        self.W_h_2 = rng.normal(scale=self.sigma, size=(self.N , self.N + 1))  # hidden-to-hidden weights & bias
 
         self.W_y = rng.normal(scale=self.sigma, size=(num_outputs, self.N + 1))  # hidden-to-output weights & bias
         self.B = rng.normal(scale=self.sigma, size=(self.N, num_outputs))  
@@ -122,7 +122,7 @@ class MLP(object):
         if not (noise == 0.):
             hidden1 += rng.normal(scale=noise, size=hidden1.shape)
 
-        hidden2 = self.activate(np.dot(W_h_2, add_bias(inputs)))
+        hidden2 = self.activate(np.dot(W_h_2, add_bias(hidden1)))
         if not (noise == 0.):
             hidden2 += rng.normal(scale=noise, size=hidden2.shape)
 
@@ -174,7 +174,7 @@ class MLP(object):
 
         # do a forward sweep through the network
         if (output is None):
-            (hidden, output) = self.inference(rng, inputs)
+            (hidden1, hidden2, output) = self.inference(rng, inputs)
         return np.sum((targets - output) ** 2, axis=0)
 
     # The function for calculating the mean-squared error loss
@@ -214,7 +214,7 @@ class MLP(object):
         
         delta_W_h_2 = np.dot(
             np.dot(self.W_y[:, :-1].transpose(), error * self.act_deriv(output)) * self.act_deriv(hidden2), \
-            add_bias(inputs).transpose())
+            add_bias(hidden1).transpose())
         
         delta_W_y = np.dot(error * self.act_deriv(output), add_bias(hidden2).transpose())
 
@@ -300,11 +300,11 @@ class MLP(object):
         cosine_similarity = np.zeros((num_epochs,))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+            grad[t, ...], _, _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr = calculate_grad_snr(grad)
 
         # run the training for the given number of epochs
@@ -325,7 +325,7 @@ class MLP(object):
                 update_counter += 1
 
             # calculate the current test accuracy
-            (testhid, testout) = self.inference(rng, test_images)
+            (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
             test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
             grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
@@ -539,19 +539,23 @@ class NodePerturbMLP(MLP):
         """
 
         # get the random perturbations
-        hidden, output = self.inference(rng, inputs)
-        hidden_p, output_p = self.inference(rng, inputs, noise=noise)
+        hidden1, hidden2, output = self.inference(rng, inputs)
+        hidden1_p, hidden2_p, output_p = self.inference(rng, inputs, noise=noise)
 
         loss_now = self.mse_loss_batch(rng, inputs, targets, output=output)
         loss_per = self.mse_loss_batch(rng, inputs, targets, output=output_p)
         delta_loss = loss_now - loss_per
 
-        hidden_update = np.mean(
-            delta_loss * (((hidden_p - hidden) / noise ** 2)[:, None, :] * add_bias(inputs)[None, :, :]), axis=2)
+        hidden1_update = np.mean(
+            delta_loss * (((hidden1_p - hidden1) / noise ** 2)[:, None, :] * add_bias(inputs)[None, :, :]), axis=2)
+        
+        hidden2_update = np.mean(
+            delta_loss * (((hidden2_p - hidden2) / noise ** 2)[:, None, :] * add_bias(hidden1)[None, :, :]), axis=2)
+        
         output_update = np.mean(
-            delta_loss * (((output_p - output) / noise ** 2)[:, None, :] * add_bias(hidden_p)[None, :, :]), axis=2)
+            delta_loss * (((output_p - output) / noise ** 2)[:, None, :] * add_bias(hidden2_p)[None, :, :]), axis=2)
 
-        return (hidden_update, output_update)
+        return (hidden1_update, hidden2_update, output_update)
     
 class KolenPollackMLP(MLP):
     """
@@ -568,17 +572,20 @@ class KolenPollackMLP(MLP):
         ###################################################################
 
         # do a forward pass
-        (hidden, output) = self.inference(rng, inputs)
+        (hidden1, hidden2, output) = self.inference(rng, inputs)
 
         # calculate the updates for the forward weights
         error = targets - output
-        delta_W_h = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden), \
+        delta_W_h_1 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden1), \
                            add_bias(inputs).transpose())
+        delta_W_h_2 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden2), \
+                           add_bias(hidden1).transpose())
+        
         #delta_err = np.dot(self.W_y.T, error)
-        delta_err = np.dot(error * self.act_deriv(output), add_bias(hidden).transpose())
+        delta_err = np.dot(error * self.act_deriv(output), add_bias(hidden2).transpose())
         delta_W_y = delta_err - 0.1 * self.W_y
 
         # calculate the updates for the backwards weights and implement them
         delta_B = delta_err[:, :-1].transpose() - 0.1 * self.B
         self.B += eta_back * delta_B
-        return (delta_W_h, delta_W_y)
+        return (delta_W_h_1, delta_W_h_2, delta_W_y)
