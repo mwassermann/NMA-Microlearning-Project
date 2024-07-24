@@ -297,7 +297,7 @@ class MLP(object):
         losses = np.zeros((num_epochs * batches.shape[0],))
         accuracy = np.zeros((num_epochs,))
         test_loss = np.zeros((num_epochs,))
-        cosine_similarity = np.zeros((num_epochs,))
+        cosine_similarity = np.zeros((num_epochs,2))
 
         # estimate the gradient SNR on the test set
         grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
@@ -328,9 +328,13 @@ class MLP(object):
             (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
             test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
-            grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-            grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
-            cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
+            hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+            bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+
+            cos_sim_l1 = calculate_cosine_similarity(hid1, bphid1)
+            cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
+
+            cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
 
             # print an output message every report_rate epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
