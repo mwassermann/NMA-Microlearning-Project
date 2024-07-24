@@ -51,13 +51,17 @@ class MLP(object):
         #self.W_y = rng.normal(scale=self.sigma, size=(num_outputs, self.num_hidden + 1))  # hidden-to-output weights & bias
         #self.B = rng.normal(scale=self.sigma, size=(self.num_hidden, num_outputs))  # feedback weights
 
-        self.W_h = rng.normal(scale=self.sigma, size=(self.N, num_inputs+1))  # input-to-hidden weights & bias
+        self.W_h_1 = rng.normal(scale=self.sigma, size=(self.N, num_inputs+1))  # input-to-hidden weights & bias
+        self.W_h_2 = rng.normal(scale=self.sigma, size=(self.N , self.N + 1))  # hidden-to-hidden weights & bias
+
         self.W_y = rng.normal(scale=self.sigma, size=(num_outputs, self.N + 1))  # hidden-to-output weights & bias
         self.B = rng.normal(scale=self.sigma, size=(self.N, num_outputs))  
 
     def _store_initial_weights_biases(self):
         """
         Stores a copy of the network's initial weights and biases.
+
+        Note: NOT CURRENTLY USED ANYWHERE
         """
 
         self.init_lin1_weight = self.lin1.weight.data.clone()
@@ -99,30 +103,36 @@ class MLP(object):
         return Y
 
     # The function for performing a forward pass up through the network during inference
-    def inference(self, rng, inputs, W_h=None, W_y=None, noise=0.):
+    def inference(self, rng, inputs, W_h_1=None, W_h_2=None, W_y=None, noise=0.):
         """
         Recognize inputs, i.e. do a forward pass up through the network. If desired, alternative weights
         can be provided
         """
 
         # load the current network weights if no weights given
-        if W_h is None:
-            W_h = self.W_h
+        if W_h_1 is None:
+            W_h_1 = self.W_h_1
+        if W_h_2 is None:
+            W_h_2 = self.W_h_2
         if W_y is None:
             W_y = self.W_y
 
         # calculate the hidden activities
-        hidden = self.activate(np.dot(W_h, add_bias(inputs)))
+        hidden1 = self.activate(np.dot(W_h_1, add_bias(inputs)))
         if not (noise == 0.):
-            hidden += rng.normal(scale=noise, size=hidden.shape)
+            hidden1 += rng.normal(scale=noise, size=hidden1.shape)
+
+        hidden2 = self.activate(np.dot(W_h_2, add_bias(hidden1)))
+        if not (noise == 0.):
+            hidden2 += rng.normal(scale=noise, size=hidden2.shape)
 
         # calculate the output activities
-        output = self.activate(np.dot(W_y, add_bias(hidden)))
+        output = self.activate(np.dot(W_y, add_bias(hidden2)))
 
         if not (noise == 0.):
             output += rng.normal(scale=noise, size=output.shape)
 
-        return hidden, output
+        return hidden1, hidden2, output
 
     def forward(self, X, y=None):
         """
@@ -136,6 +146,8 @@ class MLP(object):
 
         Returns:
         - y_pred (torch.Tensor): Predicted targets.
+
+        Note: NOT CURRENTLY USED ANYWHERE
         """
 
         h = self.activation(self.lin1(X.reshape(-1, self.num_inputs)))
@@ -162,7 +174,7 @@ class MLP(object):
 
         # do a forward sweep through the network
         if (output is None):
-            (hidden, output) = self.inference(rng, inputs, W_h, W_y)
+            (hidden1, hidden2, output) = self.inference(rng, inputs)
         return np.sum((targets - output) ** 2, axis=0)
 
     # The function for calculating the mean-squared error loss
@@ -177,13 +189,39 @@ class MLP(object):
         """
         Calculates the weight updates for perturbation learning, using noise with SD as given
         """
-        raise NotImplementedError()
+        # get the random perturbations
+        delta_W_h = rng.normal(scale=noise, size=self.W_h.shape)
+        delta_W_y = rng.normal(scale=noise, size=self.W_y.shape)
+
+        # calculate the loss with and without the perturbations
+        loss_now = self.mse_loss(rng, inputs, targets)
+        loss_per = self.mse_loss(rng, inputs, targets, self.W_h + delta_W_h, self.W_y + delta_W_y)
+
+        # updates
+        delta_loss = loss_now - loss_per
+        W_h_update = delta_loss * delta_W_h / noise ** 2
+        W_y_update = delta_loss * delta_W_y / noise ** 2
+        return W_h_update, W_y_update
 
     def node_perturb(self, rng, inputs, targets, noise=1.0):
         """
         Calculates the weight updates for node perturbation learning, using noise with SD as given
         """
-        raise NotImplementedError()
+        # get the random perturbations
+        hidden, output = self.inference(rng, inputs)
+        hidden_p, output_p = self.inference(rng, inputs, noise=noise)
+
+        loss_now = self.mse_loss_batch(rng, inputs, targets, output=output)
+        loss_per = self.mse_loss_batch(rng, inputs, targets, output=output_p)
+        delta_loss = loss_now - loss_per
+
+        hidden_update = np.mean(
+            delta_loss * (((hidden_p - hidden) / noise ** 2)[:, None, :] * add_bias(inputs)[None, :, :]), axis=2)
+        output_update = np.mean(
+            delta_loss * (((output_p - output) / noise ** 2)[:, None, :] * add_bias(hidden_p)[None, :, :]), axis=2)
+
+        return (hidden_update, output_update)
+
 
     # function for calculating gradient updates
     def gradient(self, rng, inputs, targets):
@@ -192,24 +230,43 @@ class MLP(object):
         """
 
         # do a forward pass
-        hidden, output = self.inference(rng, inputs)
+        hidden1, hidden2, output = self.inference(rng, inputs)
 
         # calculate the gradients
         error = targets - output
-        delta_W_h = np.dot(
-            np.dot(self.W_y[:, :-1].transpose(), error * self.act_deriv(output)) * self.act_deriv(hidden), \
-            add_bias(inputs).transpose())
-        delta_W_y = np.dot(error * self.act_deriv(output), add_bias(hidden).transpose())
 
-        return delta_W_h, delta_W_y
+    # calculate delta for the output layer
+        delta_y = error * self.act_deriv(output)
+    
+    # calculate delta for the second hidden layer
+        delta_h2 = np.dot(self.W_y[:, :-1].T, delta_y) * self.act_deriv(hidden2)
+        
+        # calculate delta for the first hidden layer
+        delta_h1 = np.dot(self.W_h_2[:, :-1].T, delta_h2) * self.act_deriv(hidden1)
+        
+        # calculate gradients
+        delta_W_y = np.dot(delta_y, add_bias(hidden2).T)
+        delta_W_h_2 = np.dot(delta_h2, add_bias(hidden1).T)
+        delta_W_h_1 = np.dot(delta_h1, add_bias(inputs).T)
+
+        return delta_W_h_1, delta_W_h_2, delta_W_y
 
     # function for calculating feedback alignment updates
     def feedback(self, rng, inputs, targets):
         """
         Calculates the weight updates for feedback alignment learning
         """
-        raise NotImplementedError()
+        # do a forward pass
+        hidden, output = self.inference(rng, inputs)
 
+        # calculate the updates
+        error = targets - output
+        delta_W_h = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden),
+                           add_bias(inputs).transpose())
+        delta_W_y = np.dot(error * self.act_deriv(output), add_bias(hidden).transpose())
+
+        return delta_W_h, delta_W_y
+    
     # function for calculating Kolen-Pollack updates
     def kolepoll(self, rng, inputs, targets, eta_back=0.01):
         """
@@ -217,20 +274,20 @@ class MLP(object):
         """
         raise NotImplementedError()
 
-    def return_grad(self, rng, inputs, targets, algorithm='backprop', eta=0., noise=1.0):
+    def return_grad(self, rng, inputs, targets, algorithm='backprop', eta=0.01, noise=1.0):
         # calculate the updates for the weights with the appropriate algorithm
         if algorithm == 'perturb':
-            delta_W_h, delta_W_y = self.perturb(rng, inputs, targets, noise=noise)
+            delta_W_h_1, delta_W_h_2, delta_W_y = self.perturb(rng, inputs, targets, noise=noise)
         elif algorithm == 'node_perturb':
-            delta_W_h, delta_W_y = self.node_perturb(rng, inputs, targets, noise=noise)
+            delta_W_h_1, delta_W_h_2, delta_W_y = self.node_perturb(rng, inputs, targets, noise=noise)
         elif algorithm == 'feedback':
-            delta_W_h, delta_W_y = self.feedback(rng, inputs, targets)
+            delta_W_h_1, delta_W_h_2, delta_W_y = self.feedback(rng, inputs, targets)
         elif algorithm == 'kolepoll':
-            delta_W_h, delta_W_y = self.kolepoll(rng, inputs, targets, eta_back=eta)
+            delta_W_h_1, delta_W_h_2, delta_W_y = self.kolepoll(rng, inputs, targets, eta_back=eta)
         else:
-            delta_W_h, delta_W_y = self.gradient(rng, inputs, targets)
+            delta_W_h_1, delta_W_h_2, delta_W_y = self.gradient(rng, inputs, targets)
 
-        return delta_W_h, delta_W_y
+        return delta_W_h_1, delta_W_h_2, delta_W_y
 
     # function for updating the network
     def update(self, rng, inputs, targets, algorithm='backprop', eta=0.01, noise=1.0):
@@ -243,10 +300,11 @@ class MLP(object):
         - 'kolepoll': Kolen-Pollack
         """
 
-        delta_W_h, delta_W_y = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=eta, noise=noise)
+        delta_W_h_1, delta_W_h_2, delta_W_y = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=eta, noise=noise)
 
         # do the updates
-        self.W_h += eta * delta_W_h
+        self.W_h_1 += eta * delta_W_h_1
+        self.W_h_2 += eta * delta_W_h_2
         self.W_y += eta * delta_W_y
     
     def alter_inputs(self, train,type=None):
@@ -307,14 +365,14 @@ class MLP(object):
         losses = np.zeros((num_epochs * batches.shape[0],))
         accuracy = np.zeros((num_epochs,))
         test_loss = np.zeros((num_epochs,))
-        cosine_similarity = np.zeros((num_epochs,))
+        cosine_similarity = np.zeros((num_epochs,2))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+            grad[t, ...], _, _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr = calculate_grad_snr(grad)
 
         if noise_type in ['gauss', 's&p']:
@@ -340,13 +398,17 @@ class MLP(object):
                 update_counter += 1
 
             # calculate the current test accuracy
-            (testhid, testout) = self.inference(rng, test_images)
+            (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
             test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
-            grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-            grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
-            cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
+            hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+            bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
+            cos_sim_l1 = calculate_cosine_similarity(hid1, bphid1)
+            cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
+
+            cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
+  
             # print an output message every report_rate epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
                 print("...completed ", (epoch + 1)/report_rate,
@@ -356,7 +418,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 
     def train_nonstat_data(self, rng, images, labels, num_epochs, test_images, test_labels, learning_rate=0.01, batch_size=20, \
@@ -403,7 +465,7 @@ class MLP(object):
         cosine_similarity = np.zeros((num_epochs,))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
@@ -486,7 +548,7 @@ class MLP(object):
         cosine_similarity = []
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
@@ -549,19 +611,23 @@ class NodePerturbMLP(MLP):
         """
 
         # get the random perturbations
-        hidden, output = self.inference(rng, inputs)
-        hidden_p, output_p = self.inference(rng, inputs, noise=noise)
+        hidden1, hidden2, output = self.inference(rng, inputs)
+        hidden1_p, hidden2_p, output_p = self.inference(rng, inputs, noise=noise)
 
         loss_now = self.mse_loss_batch(rng, inputs, targets, output=output)
         loss_per = self.mse_loss_batch(rng, inputs, targets, output=output_p)
         delta_loss = loss_now - loss_per
 
-        hidden_update = np.mean(
-            delta_loss * (((hidden_p - hidden) / noise ** 2)[:, None, :] * add_bias(inputs)[None, :, :]), axis=2)
+        hidden1_update = np.mean(
+            delta_loss * (((hidden1_p - hidden1) / noise ** 2)[:, None, :] * add_bias(inputs)[None, :, :]), axis=2)
+        
+        hidden2_update = np.mean(
+            delta_loss * (((hidden2_p - hidden2) / noise ** 2)[:, None, :] * add_bias(hidden1)[None, :, :]), axis=2)
+        
         output_update = np.mean(
-            delta_loss * (((output_p - output) / noise ** 2)[:, None, :] * add_bias(hidden_p)[None, :, :]), axis=2)
+            delta_loss * (((output_p - output) / noise ** 2)[:, None, :] * add_bias(hidden2_p)[None, :, :]), axis=2)
 
-        return (hidden_update, output_update)
+        return (hidden1_update, hidden2_update, output_update)
     
 class KolenPollackMLP(MLP):
     """
@@ -578,17 +644,20 @@ class KolenPollackMLP(MLP):
         ###################################################################
 
         # do a forward pass
-        (hidden, output) = self.inference(rng, inputs)
+        (hidden1, hidden2, output) = self.inference(rng, inputs)
 
         # calculate the updates for the forward weights
         error = targets - output
-        delta_W_h = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden), \
+        delta_W_h_1 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden1), \
                            add_bias(inputs).transpose())
+        delta_W_h_2 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden2), \
+                           add_bias(hidden1).transpose())
+        
         #delta_err = np.dot(self.W_y.T, error)
-        delta_err = np.dot(error * self.act_deriv(output), add_bias(hidden).transpose())
+        delta_err = np.dot(error * self.act_deriv(output), add_bias(hidden2).transpose())
         delta_W_y = delta_err - 0.1 * self.W_y
 
         # calculate the updates for the backwards weights and implement them
         delta_B = delta_err[:, :-1].transpose() - 0.1 * self.B
         self.B += eta_back * delta_B
-        return (delta_W_h, delta_W_y)
+        return (delta_W_h_1, delta_W_h_2, delta_W_y)
