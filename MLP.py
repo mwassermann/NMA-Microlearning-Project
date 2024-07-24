@@ -548,11 +548,11 @@ class MLP(object):
         cosine_similarity = []
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+            grad[t, ...], _, _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr = calculate_grad_snr(grad)
 
         converged = False
@@ -573,9 +573,13 @@ class MLP(object):
                 (testhid, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
                 test_loss.append(self.mse_loss(rng, test_images, test_labels))
-                grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-                grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
-                cosine_similarity.append(calculate_cosine_similarity(grad_test, grad_bp))
+                hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+                bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+
+                cos_sim_l1 = calculate_cosine_similarity(hid1, bphid1)
+                cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
+
+                cosine_similarity.append([cos_sim_l1, cos_sim_l2])
 
             # print an output message every 100 iterations
             if report and np.mod(update_counter+1, images.shape[1]) == 0: # report_rate*10
@@ -598,7 +602,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 class NodePerturbMLP(MLP):
     """
