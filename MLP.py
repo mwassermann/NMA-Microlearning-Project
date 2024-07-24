@@ -374,24 +374,19 @@ class MLP(object):
 
         Returns an array of the losses achieved at each epoch (and accuracies if test data given).
         """
-
-
-        '''
-        ideas: 
-        - give data sorted according to non-stationary distribution
-        - sort data in this method and then use it accordingly
-        - parameter depending on non-stationarity type
-        '''
-
-
         # sort data here
         # 50/50 split
         in_first_half = [1 if sum(labels[0:4, i]) == 1 else 0 for i in range(images.shape[1])]
         images_first_half = images[:, np.where(in_first_half)[0]]
         labels_first_half = labels[:, np.where(in_first_half)[0]]
-        images_second_half = images # [:, np.where(1 - np.array(in_first_half))[0]] 
-        labels_second_half = labels # [:, np.where(1 - np.array(in_first_half))[0]]
+        images_second_half = images 
+        labels_second_half = labels 
 
+        sampled_indices = np.random.choice(images_first_half.shape[1], size=images_second_half.shape[1], replace=True)
+
+        # Create new vectors based on the sampled indices
+        images_first_half = images_first_half[:, sampled_indices]
+        labels_first_half = labels_first_half[:, sampled_indices]
 
         # provide an output message
         if report:
@@ -526,7 +521,7 @@ class MLP(object):
                         " iterations (corresponding to 1 epoch) of training data (single images). Current loss: ", round(losses[-1], 4), ".")
 
             # check for convergence
-            if loss < conv_loss:
+            if sum(losses[-10:]) < conv_loss:
                 converged = True
                 losses.append(loss)  
                 print("...completed ", (update_counter + 1),
