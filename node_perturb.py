@@ -202,8 +202,6 @@ def main():
   # Create a CLI Parser:
   parser = argparse.ArgumentParser(description="Specify which Node Perturbation Nets to run", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-  parser.add_argument('nets', type=str, metavar='N', nargs="+", help = "which learning scenarios to train node perturbation networks in")
-
   parser.add_argument("-t", "--test", action="store_true", help ="train the network in test conditions")
   parser.add_argument("-n", "--normal", action="store_true", help="train the  network in normal conditions")
   parser.add_argument("-o", "--online", action="store_true", help="train the network in online conditions")
