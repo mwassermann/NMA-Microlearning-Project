@@ -208,15 +208,20 @@ class MLP(object):
 
         # calculate the gradients
         error = targets - output
-        delta_W_h_1 = np.dot(
-            np.dot(self.W_y[:, :-1].transpose(), error * self.act_deriv(output)) * self.act_deriv(hidden1), \
-            add_bias(inputs).transpose())
+
+    # calculate delta for the output layer
+        delta_y = error * self.act_deriv(output)
+    
+    # calculate delta for the second hidden layer
+        delta_h2 = np.dot(self.W_y[:, :-1].T, delta_y) * self.act_deriv(hidden2)
         
-        delta_W_h_2 = np.dot(
-            np.dot(self.W_y[:, :-1].transpose(), error * self.act_deriv(output)) * self.act_deriv(hidden2), \
-            add_bias(hidden1).transpose())
+        # calculate delta for the first hidden layer
+        delta_h1 = np.dot(self.W_h_2[:, :-1].T, delta_h2) * self.act_deriv(hidden1)
         
-        delta_W_y = np.dot(error * self.act_deriv(output), add_bias(hidden2).transpose())
+        # calculate gradients
+        delta_W_y = np.dot(delta_y, add_bias(hidden2).T)
+        delta_W_h_2 = np.dot(delta_h2, add_bias(hidden1).T)
+        delta_W_h_1 = np.dot(delta_h1, add_bias(inputs).T)
 
         return delta_W_h_1, delta_W_h_2, delta_W_y
 
@@ -234,7 +239,7 @@ class MLP(object):
         """
         raise NotImplementedError()
 
-    def return_grad(self, rng, inputs, targets, algorithm='backprop', eta=0., noise=1.0):
+    def return_grad(self, rng, inputs, targets, algorithm='backprop', eta=0.01, noise=1.0):
         # calculate the updates for the weights with the appropriate algorithm
         if algorithm == 'perturb':
             delta_W_h_1, delta_W_h_2, delta_W_y = self.perturb(rng, inputs, targets, noise=noise)
