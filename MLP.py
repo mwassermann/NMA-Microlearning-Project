@@ -55,7 +55,8 @@ class MLP(object):
         self.W_h_2 = rng.normal(scale=self.sigma, size=(self.N , self.N + 1))  # hidden-to-hidden weights & bias
 
         self.W_y = rng.normal(scale=self.sigma, size=(num_outputs, self.N + 1))  # hidden-to-output weights & bias
-        self.B = rng.normal(scale=self.sigma, size=(self.N, num_outputs))  
+        self.B_1 = rng.normal(scale=self.sigma, size=(self.N, num_outputs))  
+        self.B_2 = rng.normal(scale=self.sigma, size=(self.N, self.N))  
 
     def _store_initial_weights_biases(self):
         """
@@ -652,16 +653,23 @@ class KolenPollackMLP(MLP):
 
         # calculate the updates for the forward weights
         error = targets - output
-        delta_W_h_1 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden1), \
-                           add_bias(inputs).transpose())
-        delta_W_h_2 = np.dot(np.dot(self.B, error * self.act_deriv(output)) * self.act_deriv(hidden2), \
-                           add_bias(hidden1).transpose())
+
+        delta_err = error * self.act_deriv(output)
+    
+    # calculate delta for the second hidden layer
+        delta_h2 = np.dot(self.B_1, delta_err) * self.act_deriv(hidden2)
         
-        #delta_err = np.dot(self.W_y.T, error)
-        delta_err = np.dot(error * self.act_deriv(output), add_bias(hidden2).transpose())
-        delta_W_y = delta_err - 0.1 * self.W_y
+        # calculate delta for the first hidden layer
+        delta_h1 = np.dot(self.B_2, delta_h2) * self.act_deriv(hidden1)
+        
+        delta_W_y = np.dot(delta_err, add_bias(hidden2).T) - 0.1 * self.W_y
+        delta_W_h_2 = np.dot(delta_h2, add_bias(hidden1).T) - 0.1 * self.W_h_2
+        delta_W_h_1 = np.dot(delta_h1, add_bias(inputs).T) - 0.1 * self.W_h_1 
 
         # calculate the updates for the backwards weights and implement them
-        delta_B = delta_err[:, :-1].transpose() - 0.1 * self.B
-        self.B += eta_back * delta_B
+        delta_B_1 = np.dot(delta_err, add_bias(hidden2).T)[:, :-1].transpose() - 0.1 * self.B_1
+        delta_B_2 = np.dot(delta_h2, add_bias(hidden1).T)[:, :-1].transpose() - 0.1 * self.B_2
+        self.B_1 += eta_back * delta_B_1
+        self.B_2 += eta_back * delta_B_2
+
         return (delta_W_h_1, delta_W_h_2, delta_W_y)
