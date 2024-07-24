@@ -71,59 +71,63 @@ def download_mnist(train_prop=0.8, keep_prop=0.5):
 
   return train_set, valid_set, test_set, train_images, valid_images, test_images, train_labels, valid_labels, test_labels
 
-# run download mnist function
-train_set, valid_set, test_set, train_images, valid_images, test_images, train_labels, valid_labels, test_labels = download_mnist()
+def main():
+  # run download mnist function
+  train_set, valid_set, test_set, train_images, valid_images, test_images, train_labels, valid_labels, test_labels = download_mnist()
 
-# define hyperparams
-NUM_INPUTS = 784
-NUM_OUTPUTS = 10
-numhidden = 500
-batchsize = 128
-initweight = 0.1
-learnrate = 0.001
-noise = 0.1
-numepochs = 25
-numrepeats = 1
-numbatches = int(train_images.shape[1] / batchsize)
-numupdates = numepochs * numbatches
-activation = 'sigmoid'
-report = True
-rep_rate = 1
-seed = 12345
+  # define hyperparams
+  NUM_INPUTS = 784
+  NUM_OUTPUTS = 10
+  numhidden = 500
+  batchsize = 128
+  initweight = 0.1
+  learnrate = 0.001
+  noise = 0.1
+  numepochs = 25
+  numrepeats = 1
+  numbatches = int(train_images.shape[1] / batchsize)
+  numupdates = numepochs * numbatches
+  activation = 'sigmoid'
+  report = True
+  rep_rate = 1
+  seed = 12345
 
-# Make the network
-# Train and observe the performance of NodePerturbMLP
+  # Make the network
+  # Train and observe the performance of NodePerturbMLP
 
-losses_node_perturb = np.zeros((numupdates,))
-accuracy_node_perturb = np.zeros((numepochs,))
-test_losses_node_perturb = np.zeros((numepochs,))
-snr_node_perturb = np.zeros((numepochs,))
-cosine_similarity_node_perturb = np.zeros((numepochs,))
+  losses_node_perturb = np.zeros((numupdates,))
+  accuracy_node_perturb = np.zeros((numepochs,))
+  test_losses_node_perturb = np.zeros((numepochs,))
+  snr_node_perturb = np.zeros((numepochs,))
+  cosine_similarity_node_perturb = np.zeros((numepochs,))
 
-# set the random seed
-rng_np = np.random.default_rng(seed=seed)
+  # set the random seed
+  rng_np = np.random.default_rng(seed=seed)
 
-# select 1000 random images to test the accuracy on
-indices = rng_np.choice(range(test_images.shape[1]), size=(1000,), replace=False)
+  # select 1000 random images to test the accuracy on
+  indices = rng_np.choice(range(test_images.shape[1]), size=(1000,), replace=False)
 
-# create a network and train it using weight perturbation
-with contextlib.redirect_stdout(io.StringIO()):
-    netnodeperturb = NodePerturbMLP(rng_np, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
-    (losses_node_perturb[:], accuracy_node_perturb[:], test_losses_node_perturb[:], snr_node_perturb, cosine_similarity_node_perturb[:]) = \
-        netnodeperturb.train(rng_np, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
-                             learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
-                             report=report, report_rate=rep_rate)
+  # create a network and train it using weight perturbation
+  with contextlib.redirect_stdout(io.StringIO()):
+      netnodeperturb = NodePerturbMLP(rng_np, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
+      (losses_node_perturb[:], accuracy_node_perturb[:], test_losses_node_perturb[:], snr_node_perturb, cosine_similarity_node_perturb[:]) = \
+          netnodeperturb.train(rng_np, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
+                              learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
+                              report=report, report_rate=rep_rate)
 
-# save the weights and params
-torch.save(netnodeperturb.state_dict(), "node_perturb_model.pt")
+  # save the weights and params
+  torch.save(netnodeperturb.state_dict(), "node_perturb_model.pt")
 
-# to load the weights and params, in the main doc:
-netnodeperturb = MLP()
-netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
+  # to load the weights and params, in the main doc:
+  # netnodeperturb = MLP()
+  # netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
 
-# save the dfs as csv
-filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
-data = [losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr_node_perturb, cosine_similarity_node_perturb]
+  # save the dfs as csv
+  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
+  data = [losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr_node_perturb, cosine_similarity_node_perturb]
 
-for i, df in enumerate(data):
-  df.tofile(f"data/node_perturb/{filenames[i]}.csv", sep=",")
+  for i, df in enumerate(data):
+    df.tofile(f"data/node_perturb/{filenames[i]}.csv", sep=",")
+
+if __name__ == "__main__":
+  main()
