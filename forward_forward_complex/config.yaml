@@ -1,0 +1,33 @@
+seed: 42
+device: "cpu"  # cpu or cuda
+
+input:
+  path: datasets
+  batch_size: 128
+
+
+model:
+  peer_normalization: 0.03
+  momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
+
+  hidden_dim: 500
+  num_layers: 2
+
+
+training:
+  epochs: 100
+
+  learning_rate: 1e-3
+  weight_decay: 0
+  momentum: 0
+
+  downstream_learning_rate: 1e-3
+  downstream_weight_decay: 0
+
+  val_idx: 0  # -1: validate only once training has finished; n: validate every n epochs.
+  final_test: True  # Set to true to evaluate performance on test-set.
+
+
+hydra:
+  run:
+    dir: logs
