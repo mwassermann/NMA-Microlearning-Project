@@ -25,7 +25,7 @@ import io
 ## Other functions imports
 from helpers import sigmoid, ReLU, add_bias, create_batches, calculate_accuracy, calculate_cosine_similarity, calculate_grad_snr
 
-from MLP import MLP, NodePerturbMLP
+from MLP import MLP.MLP, NodePerturbMLP
 
 # Download MNIST function
 def download_mnist(train_prop=0.8, keep_prop=0.5):
