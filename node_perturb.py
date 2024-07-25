@@ -80,7 +80,7 @@ def node_perturb_test(train_images, train_labels, test_images, test_labels, indi
     (losses_node_perturb_test, accuracy_node_perturb_test, test_losses_node_perturb_test, snr_node_perturb_test, cosine_similarity_node_perturb_test) = testnodeperturb.train(rng, train_images, train_labels, 10, test_images[:, indices], test_labels[:, indices], learning_rate=0.001, batch_size=128, algorithm='node_perturb', noise=0.1, report=True, report_rate=1)
 
   # save the weights and params
-  torch.save(testnodeperturb.state_dict(), "node_perturb_test.pt")
+  # torch.save(testnodeperturb.state_dict(), "node_perturb_test.pt")
 
   # to load the weights and params, in the main doc:
   # netnodeperturb = MLP()
@@ -209,6 +209,7 @@ def main():
   parser.add_argument("-s", "--non-stat", action="store_true", help="train the network in non-stationary conditions")
 
   args = parser.parse_args()
+  print(args)
   # run download mnist function
   train_set, valid_set, test_set, train_images, valid_images, test_images, train_labels, valid_labels, test_labels = download_mnist()
 
@@ -235,24 +236,24 @@ def main():
   # select 1000 random images to test the accuracy on
   indices = rng_np.choice(range(test_images.shape[1]), size=(1000,), replace=False)
 
-  if args["test"]:
+  if args.test:
     # Create a small newtork to test that this all actually works
     node_perturb_test(train_images=train_images, train_labels=train_labels, test_images=test_images, test_labels=test_labels, indices=indices)
 
-  if args["normal"]:
+  if args.normal:
     # create a network and train it using node perturbation in normal conditions
     node_perturb_normal(rng = rng_np, numhidden=numhidden, batchsize=batchsize, initweight=initweight, learnrate=learnrate, noise=noise, numepochs=numepochs, activation=activation, report=report, rep_rate=rep_rate, train_images=train_images, train_labels=train_labels, test_images=test_images, test_labels=test_labels, indices=indices)
 
-  if args["online"]:
+  if args.online:
     # create a network and train it using node perturbation in online conditions
     # TODO insert code here
     a = 0
 
-  if args["noisy"]:
+  if args.noisy:
     # create a network and train it using node perturbation in noisy conditions
     b = 0
 
-  if args["non-stat"]:
+  if args.non_stat:
     # create a network and train it using node perturbation in non-stationary conditions
     c = 0 
 
