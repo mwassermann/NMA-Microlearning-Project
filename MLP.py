@@ -191,9 +191,9 @@ class MLP(object):
         Calculate the cross entropy loss on the given targets
         """
         criterion = nn.CrossEntropyLoss()
-        (hidden1, hidden2, output) = self.inference(rng, inputs)
+        (hidden1, hidden2, preds) = self.inference(rng, inputs)
 
-        return criterion(output, targets)
+        return criterion(torch.as_tensor(preds, dtype=float), torch.as_tensor(targets, dtype=float))
 
     # function for calculating perturbation updates
     def perturb(self, rng, inputs, targets, noise=1.0):
@@ -402,7 +402,7 @@ class MLP(object):
                 targets = labels[:, batches[b, :]]
 
                 # calculate the current loss
-                losses[update_counter] = self.mse_loss(rng, batch_input, targets)
+                losses[update_counter] = self.cross_ent_loss(rng, batch_input, targets)
 
                 # update the weights
                 self.update(rng, batch_input, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
@@ -411,7 +411,7 @@ class MLP(object):
             # calculate the current test accuracy
             (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
-            test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
+            test_loss[epoch] = self.cross_ent_loss(rng, test_images, test_labels)
             hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
             bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
@@ -503,7 +503,7 @@ class MLP(object):
                 targets = labels[:, batches[b, :]]
 
                 # calculate the current loss
-                losses[update_counter] = self.mse_loss(rng, inputs, targets)
+                losses[update_counter] = self.cross_ent_loss(rng, inputs, targets)
 
                 # update the weights
                 self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
@@ -515,7 +515,7 @@ class MLP(object):
             # calculate the current test accuracy
             (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
-            test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
+            test_loss[epoch] = self.cross_ent_loss(rng, test_images, test_labels)
             grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
             grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
             cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
@@ -574,7 +574,7 @@ class MLP(object):
             targets = labels[:, [t]]
 
             # calculate the current loss
-            loss = self.mse_loss(rng, inputs, targets)
+            loss = self.cross_ent_loss(rng, inputs, targets)
 
             # store the loss every report_rate samples, should be batchsize to be comparable to other methods
             if update_counter % report_rate == 0:
@@ -583,7 +583,7 @@ class MLP(object):
                 # calculate the current test accuracy
                 (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
-                test_loss.append(self.mse_loss(rng, test_images, test_labels))
+                test_loss.append(self.cross_ent_loss(rng, test_images, test_labels))
                 hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
                 bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
@@ -629,8 +629,8 @@ class NodePerturbMLP(MLP):
         hidden1, hidden2, output = self.inference(rng, inputs)
         hidden1_p, hidden2_p, output_p = self.inference(rng, inputs, noise=noise)
 
-        loss_now = self.mse_loss_batch(rng, inputs, targets, output=output)
-        loss_per = self.mse_loss_batch(rng, inputs, targets, output=output_p)
+        loss_now = self.cross_ent_loss(rng, inputs, targets, output=output)
+        loss_per = self.cross_ent_loss(rng, inputs, targets, output=output_p)
         delta_loss = loss_now - loss_per
 
         hidden1_update = np.mean(
