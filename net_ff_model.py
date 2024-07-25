@@ -144,8 +144,10 @@ class net_FF_model:
         for param_group in self.mlp_opt[model].param_groups:
             param_group['lr'] = lr
         
-        real_losses = []
+        running_real_losses = []
+        running_return_losses = []
         return_losses = []
+        real_losses = [] 
         test_losses = []
         test_accuracies = []
         
@@ -165,15 +167,20 @@ class net_FF_model:
                 model
             )
             
-            real_losses.append(
+            running_real_losses.append(
                 self.train_batch(inputs, labels, model)
             )
-            return_losses.append(
+            running_return_losses.append(
                 self._get_inference_loss(inputs, labels, model, return_loss)
             )
 
             # accuracy and loss in the testing data
-            if update_counter % (report_rate / 10) == 0:
+            if update_counter % (report_rate) == 0:
+                real_losses.append(sum(running_real_losses) / len(running_real_losses))
+                return_losses.append(sum(running_return_losses) / len(running_return_losses))
+                running_real_losses = []
+                running_return_losses = []
+                
                 test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
                 test_losses.append(test_loss)
                 test_accuracies.append(test_accuracy)
@@ -186,7 +193,7 @@ class net_FF_model:
                 Current testing accuracy:  {np.mean(test_accuracies[-report_rate : -1])} \n
                 Current testing loss:  {np.mean(test_losses[-report_rate : -1])} \n ''')
 
-            if sum(return_losses[-10:]) < conv_loss:
+            if sum(return_losses) < conv_loss:
                 converged = True
                 # report
                 print(f'''...Converge at {update_counter + 1} iterations of training.''')
