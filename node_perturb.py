@@ -104,7 +104,10 @@ def node_perturb_normal(rng, numhidden, batchsize, initweight, learnrate, noise,
                             report=report, report_rate=rep_rate)
   
   # save the weights and params
-  torch.save(netnodeperturb.state_dict(), "node_perturb_model.pt")
+  # torch.save(netnodeperturb.state_dict(), "node_perturb_model.pt")
+    # OOPS, Can't do this because our MLP class doesn't inherit from a torch
+    #  NN/MLP object.
+
 
   # to load the weights and params, in the main doc:
   # netnodeperturb = MLP()
@@ -119,19 +122,19 @@ def node_perturb_normal(rng, numhidden, batchsize, initweight, learnrate, noise,
   
   return
 
-def node_perturb_online():
+def node_perturb_online(rng, numhidden, batchsize, initweight, learning_rate, noise, numupdates, activation, report, train_images, train_labels, test_images, test_labels, indices):
 
   # Online Learning
   with contextlib.redirect_stdout(io.StringIO()):
-    netnodeperturb_online = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
+    netnodeperturb_online = NodePerturbMLP(rng, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
     (losses_np_online, accuracy_np_online, test_loss_np_online, snr_np_online, cos_sim_np_online) = \
-        netnodeperturb_online.train_online(rng_bp2, train_images, train_labels, test_images[:, indices], test_labels[:, indices], \
-                      learning_rate=0.01, max_it=numupdates*batchsize, conv_loss = 1e-4, algorithm='node_perturb', noise=noise, \
+        netnodeperturb_online.train_online(rng, train_images, train_labels, test_images[:, indices], test_labels[:, indices], \
+                      learning_rate=learning_rate, max_it=numupdates*batchsize, conv_loss = 1e-4, algorithm='node_perturb', noise=noise, \
                       report=report, report_rate=batchsize)
     
 
   # save the weights and params
-  torch.save(netnodeperturb_online.state_dict(), "node_perturb_model.pt")
+  # torch.save(netnodeperturb_online.state_dict(), "node_perturb_model.pt")
 
   # to load the weights and params, in the main doc:
   # netnodeperturb = MLP()
@@ -146,18 +149,18 @@ def node_perturb_online():
 
   return
 
-def node_perturb_noisy():
+def node_perturb_noisy(rng, numhidden, batchsize, initweight, learnrate, noise, numepochs, activation, report, rep_rate, train_images, train_labels, test_images, test_labels, indices):
 
   # Noisy Input
   with contextlib.redirect_stdout(io.StringIO()):
-    nodeperturb_noisy = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
+    nodeperturb_noisy = NodePerturbMLP(rng, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
     (losses_np_noisy, accuracy_np_noisy, test_loss_np_noisy, snr_np_noisy, cos_sim_np_noisy) = \
-        nodeperturb_noisy.train(rng_bp2, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
+        nodeperturb_noisy.train(rng, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
                         learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
                         noise_type='gauss',report=report, report_rate=rep_rate)
     
   # save the weights and params
-  torch.save(nodeperturb_noisy.state_dict(), "node_perturb_model.pt")
+  # torch.save(nodeperturb_noisy.state_dict(), "node_perturb_model.pt")
 
   # to load the weights and params, in the main doc:
   # netnodeperturb = MLP()
@@ -172,18 +175,18 @@ def node_perturb_noisy():
 
   return
 
-def node_perturb_non_stat():
+def node_perturb_non_stat(rng, numhidden, batchsize, initweight, learnrate, noise, numepochs, activation, report, rep_rate, train_images, train_labels, test_images, test_labels, indices):
 
   # Non-Stationary Data
   with contextlib.redirect_stdout(io.StringIO()):
-    nodeperturb_nonstat = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
+    nodeperturb_nonstat = NodePerturbMLP(rng, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
     (losses_np_nonstat, accuracy_np_nonstat, test_loss_np_nonstat, snr_np_non_stat, cos_sim_np_non_stat) = \
-        nodeperturb_nonstat.train_nonstat_data(rng_bp2, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
+        nodeperturb_nonstat.train_nonstat_data(rng, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
                         learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
                         report=report, report_rate=1)
     
   # save the weights and params
-  torch.save(nodeperturb_nonstat.state_dict(), "node_perturb_model.pt")
+  # torch.save(nodeperturb_nonstat.state_dict(), "node_perturb_model.pt")
 
   # to load the weights and params, in the main doc:
   # netnodeperturb = MLP()
@@ -246,16 +249,15 @@ def main():
 
   if args.online:
     # create a network and train it using node perturbation in online conditions
-    # TODO insert code here
-    a = 0
+    node_perturb_online(rng = rng_np, numhidden=numhidden, batchsize=batchsize, initweight=initweight, learning_rate=learnrate, noise=noise, numupdates=numupdates, activation=activation, report=report, train_images=train_images, train_labels=train_labels, test_images=test_images, test_labels=test_labels, indices=indices)
 
   if args.noisy:
     # create a network and train it using node perturbation in noisy conditions
-    b = 0
+    node_perturb_noisy(rng = rng_np, numhidden=numhidden, batchsize=batchsize, initweight=initweight, learnrate=learnrate, noise=noise, numepochs=numepochs, activation=activation, report=report, rep_rate=rep_rate, train_images=train_images, train_labels=train_labels, test_images=test_images, test_labels=test_labels, indices=indices)
 
   if args.non_stat:
     # create a network and train it using node perturbation in non-stationary conditions
-    c = 0 
+    node_perturb_non_stat(rng = rng_np, numhidden=numhidden, batchsize=batchsize, initweight=initweight, learnrate=learnrate, noise=noise, numepochs=numepochs, activation=activation, report=report, rep_rate=rep_rate, train_images=train_images, train_labels=train_labels, test_images=test_images, test_labels=test_labels, indices=indices)
 
 if __name__ == "__main__":
   main()
