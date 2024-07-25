@@ -1,20 +1,23 @@
 # dependencies
-from IPython.display import Image, SVG, display
+import contextlib
+import io
 import os
+import random
+import warnings
 from pathlib import Path
 
-import random
-from tqdm import tqdm
-import warnings
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import scipy
 import torch
 import torchvision
-import contextlib
-import io
+from IPython.display import SVG, Image, display
+from tqdm import tqdm
 
-from helpers import sigmoid, ReLU, add_bias, create_batches, calculate_accuracy, calculate_cosine_similarity, calculate_grad_snr
+from helpers import (ReLU, add_bias, calculate_accuracy,
+                     calculate_cosine_similarity, calculate_grad_snr,
+                     create_batches, sigmoid)
+
 
 # The main network class
 # This will function as the parent class for our networks, which will implement different learning algorithms
@@ -369,12 +372,14 @@ class MLP(object):
         cosine_similarity = np.zeros((num_epochs,2))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
+        grad1 = np.zeros((test_images.shape[1], *self.W_h_1.shape))
+        grad2 = np.zeros((test_images.shape[1], *self.W_h_2.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _, _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
-        snr = calculate_grad_snr(grad)
+            grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+        snr1 = calculate_grad_snr(grad1)
+        snr2 = calculate_grad_snr(grad2)
 
         if noise_type in ['gauss', 's&p']:
             inputs = self.alter_inputs(np.copy(images), noise_type)
@@ -411,15 +416,16 @@ class MLP(object):
             cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
   
             # print an output message every report_rate epochs
-            if report and np.mod(epoch + 1, report_rate) == 0:
-                print("...completed ", (epoch + 1)/report_rate,
-                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2))
+            # if report and np.mod(epoch + 1, report_rate) == 0:
+            print("...completed ", (epoch + 1)/report_rate,
+                      " epochs of training. Current training loss: ", round(losses[update_counter - 1], 2),
+                      " epochs of training. Current testing loss: ", round(test_loss[epoch], 2) )
 
         # provide an output message
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr, cosine_similarity)
+        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
     
 
     def train_nonstat_data(self, rng, images, labels, num_epochs, test_images, test_labels, learning_rate=0.01, batch_size=20, \
@@ -466,12 +472,14 @@ class MLP(object):
         cosine_similarity = np.zeros((num_epochs,))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
+        grad1 = np.zeros((test_images.shape[1], *self.W_h_1.shape))
+        grad2 = np.zeros((test_images.shape[1], *self.W_h_2.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
-        snr = calculate_grad_snr(grad)
+            grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+        snr1 = calculate_grad_snr(grad1)
+        snr2 = calculate_grad_snr(grad2)
 
         # run the training for the given number of epochs
         update_counter = 0
@@ -503,11 +511,11 @@ class MLP(object):
                     break
 
             # calculate the current test accuracy
-            (testhid, testout) = self.inference(rng, test_images)
+            (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
             test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
-            grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-            grad_bp, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+            grad_test, _ , _= self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+            grad_bp, _ , _= self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
             cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
 
             # print an output message every 10 epochs
@@ -523,7 +531,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr)
+        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
     
 
     def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, max_it=None, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
@@ -549,12 +557,14 @@ class MLP(object):
         cosine_similarity = []
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
+        grad1 = np.zeros((test_images.shape[1], *self.W_h_1.shape))
+        grad2 = np.zeros((test_images.shape[1], *self.W_h_2.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
-            grad[t, ...], _, _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
-        snr = calculate_grad_snr(grad)
+            grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
+        snr1 = calculate_grad_snr(grad1)
+        snr2 = calculate_grad_snr(grad2)
 
         converged = False
         update_counter = 0
@@ -571,7 +581,7 @@ class MLP(object):
                 losses.append(loss)  
 
                 # calculate the current test accuracy
-                (testhid, testout) = self.inference(rng, test_images)
+                (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
                 test_loss.append(self.mse_loss(rng, test_images, test_labels))
                 hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
@@ -603,7 +613,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr, cosine_similarity)
+        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
     
 class NodePerturbMLP(MLP):
     """

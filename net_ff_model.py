@@ -134,7 +134,7 @@ class net_FF_model:
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
-        return np.asarray(return_loss), np.asarray(test_losses), np.asarray(test_accuracies)
+        return return_losses, test_losses, test_accuracies
 
     def train_online(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -193,7 +193,7 @@ class net_FF_model:
             
             update_counter += 1
             
-        return np.asarray(return_loss), np.asarray(test_losses), np.asarray(test_accuracies)
+        return return_losses, test_losses, test_accuracies
     
     def train_nonstationary(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -261,9 +261,60 @@ class net_FF_model:
             if epoch == int(epochs // 2):
                 first_half = 0
             
-        return np.asarray(return_loss), np.asarray(test_losses), np.asarray(test_accuracies)
+        return return_losses, test_losses, test_accuracies
+           
+    def train_noisydata(self, train_images, train_targets, 
+                   test_images, test_targets,
+                   batch_size=128, epochs=25, 
+                   model='ff_com', return_loss='cross_entropy',
+                   noise_type='gauss'):
+
+        if noise_type in ['gauss', 's&p']:
+            inputs = self.alter_inputs(np.copy(train_images), noise_type)
         
+        running_real_losses = []
+        running_return_losses = []
+        real_losses = []
+        return_losses = []
+        test_losses = []
+        test_accuracies = []
         
+        batches = helpers.create_batches(self.rng, batch_size, train_images.shape[1])
+        
+        self.mlp[model].train()
+        for epoch in range(epochs):
+            
+            # training ...
+            for b in range(batches.shape[0]):
+                inputs, labels = datatype_conversion(train_images, train_targets, batches, b, mode='train')
+                inputs, labels = self._input_conversion(inputs, labels, model)
+                
+                running_real_losses.append(
+                    self.train_batch(inputs, labels, model)
+                )
+                running_return_losses.append(
+                    self._get_inference_loss(inputs, labels, model, return_loss)
+                )
+            real_losses.append(np.mean(running_real_losses))
+            return_losses.append(np.mean(running_return_losses))
+
+            # accuracy and loss in the testing data
+            test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
+            test_losses.append(test_loss)
+            test_accuracies.append(test_accuracy)
+
+            
+            # report
+            print(f'''...completed  {epoch}  epochs of training. \n
+            Current innate loss:  {real_losses[epoch]}, \n
+            Current training {return_loss} loss:  {return_losses[epoch]}, \n
+            Current testing {return_loss} loss:  {test_losses[epoch]}, \n   
+            Current testing accuracy:  {test_accuracies[epoch]} \n         
+            ''')
+            
+        return return_losses, test_losses, test_accuracies
+
+    
     def train_batch(self, inputs, labels, model='ff_com', return_loss='cross_entropy'):
         self.mlp_opt[model].zero_grad()
 
@@ -331,6 +382,8 @@ class net_FF_model:
                             model='ff_sim', return_loss='cross_entropy'):
         if model == 'ff_com':
             preds_ori = self.inference_ori(inputs, labels, model)
+            if return_loss == 'mse':
+                preds_ori = torch.nn.functional.softmax(preds_ori, dim=1)
             return self.loss_fn[return_loss](preds_ori, labels["onehot_labels"].float()).item()
         elif model == 'ff_sim':
             pass
@@ -392,5 +445,32 @@ class net_FF_model:
         z[:, 0 : num_classes] = uniform_label
         return z
 
+    def alter_inputs(self, data, type=None):
+        if type == "gauss":
+            row = len(data)
+            mean = 0
+            var = 0.1
+            sigma = var**0.5
+            for i in range(data.shape[1]):
+                gauss = np.random.normal(mean,sigma,(row))
+                noisy = data[:,i] + gauss
+                data[:,i] = noisy
+
+        elif type == 's&p':
+            amount=0.04
+            s_vs_p=0.5
+            total_pixels = data.shape[0]
+            for i in range(data.shape[1]):
+                out = np.copy(data[:,i])
+                num_salt = np.ceil(amount * total_pixels * s_vs_p).astype(int)
+                salt_indices = np.random.randint(0, total_pixels, num_salt)
+                out[salt_indices] = 1
+                    # Pepper mode
+                num_pepper = np.ceil(amount * total_pixels * (1 - s_vs_p)).astype(int)
+                pepper_indices = np.random.randint(0, total_pixels, num_pepper)
+                out[pepper_indices] = 0
+                data[:,i] = out
+        
+        return data
     
     
