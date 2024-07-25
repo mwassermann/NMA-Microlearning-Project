@@ -1,21 +1,24 @@
 # dependencies
-from IPython.display import Image, SVG, display
+import contextlib
+import io
 import os
+import random
+import warnings
 from pathlib import Path
 
-import random
-from tqdm import tqdm
-import warnings
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import scipy
 import torch
 import torch.nn as nn
 import torchvision
-import contextlib
-import io
+from IPython.display import SVG, Image, display
+from tqdm import tqdm
 
-from helpers import sigmoid, ReLU, add_bias, create_batches, calculate_accuracy, calculate_cosine_similarity, calculate_grad_snr
+from helpers import (ReLU, add_bias, calculate_accuracy,
+                     calculate_cosine_similarity, calculate_grad_snr,
+                     create_batches, sigmoid)
+
 
 # The main network class
 # This will function as the parent class for our networks, which will implement different learning algorithms
@@ -421,9 +424,10 @@ class MLP(object):
             cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
   
             # print an output message every report_rate epochs
-            if report and np.mod(epoch + 1, report_rate) == 0:
-                print("...completed ", (epoch + 1)/report_rate,
-                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2))
+            # if report and np.mod(epoch + 1, report_rate) == 0:
+            print("...completed ", (epoch + 1)/report_rate,
+                      " epochs of training. Current training loss: ", round(losses[update_counter - 1], 2),
+                      " epochs of training. Current testing loss: ", round(test_loss[epoch], 2) )
 
         # provide an output message
         if report:
