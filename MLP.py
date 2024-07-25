@@ -523,7 +523,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 
     def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, max_it=None, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
