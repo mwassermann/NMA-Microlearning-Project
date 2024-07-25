@@ -203,7 +203,17 @@ def node_perturb_non_stat(rng, numhidden, batchsize, initweight, learnrate, nois
 
 def main():
   # Create a CLI Parser:
-  parser = argparse.ArgumentParser(description="Specify which Node Perturbation Nets to run", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser = argparse.ArgumentParser(description="""
+Specify which Node Perturbation Nets to run
+                                   
+Detailed instructions for running node perturb networks:
+- Make sure you're on main
+- Make a new folder that will contain the correct csv's for your learning condition. The location of this folder should be `/data/node_perturb/your_condition_here`. 
+- Then, make sure you are in the correct directory in the repository, basically the NMA-Microlearning-Project dir
+- Make sure your correct venv is activated in your terminal
+- Run `python node_perturb.py --your_condition_here` in that terminal.
+- The network should now be training, and depending on your machine, should take between 1.5 (for normal conditions) to idk-maybe-4 (for online learning).""",
+                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
   parser.add_argument("-t", "--test", action="store_true", help ="train the network in test conditions")
   parser.add_argument("-n", "--normal", action="store_true", help="train the  network in normal conditions")
