@@ -574,8 +574,8 @@ class MLP(object):
                 (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
                 test_loss.append(self.mse_loss(rng, test_images, test_labels))
-                hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-                bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+                hid1, hid2, _, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+                bphid1, bphid2, _, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
                 cos_sim_l1 = calculate_cosine_similarity(hid1, bphid1)
                 cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
