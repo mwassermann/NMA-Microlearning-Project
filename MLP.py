@@ -1,20 +1,24 @@
 # dependencies
-from IPython.display import Image, SVG, display
-import os
-from pathlib import Path
-
-import random
-from tqdm import tqdm
-import warnings
-import numpy as np
-import matplotlib.pyplot as plt
-import scipy
-import torch
-import torchvision
 import contextlib
 import io
+import os
+import random
+import warnings
+from pathlib import Path
 
-from helpers import sigmoid, ReLU, add_bias, create_batches, calculate_accuracy, calculate_cosine_similarity, calculate_grad_snr
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy
+import torch
+import torch.nn as nn
+import torchvision
+from IPython.display import SVG, Image, display
+from tqdm import tqdm
+
+from helpers import (ReLU, add_bias, calculate_accuracy,
+                     calculate_cosine_similarity, calculate_grad_snr,
+                     create_batches, sigmoid)
+
 
 # The main network class
 # This will function as the parent class for our networks, which will implement different learning algorithms
@@ -184,6 +188,18 @@ class MLP(object):
         Calculate the mean-squared error loss on the given targets (average over the batch)
         """
         return np.mean(self.mse_loss_batch(rng, inputs, targets, W_h=W_h, W_y=W_y, output=output))
+    
+    def cross_ent_loss(self, rng, inputs, targets):
+        """
+        Calculate the cross entropy loss on the given targets
+        """
+        criterion = nn.CrossEntropyLoss()
+        (hidden1, hidden2, preds) = self.inference(rng, inputs)
+        
+        preds = preds.transpose()
+        targets = targets.transpose()
+        
+        return criterion(torch.as_tensor(preds, dtype=float), torch.as_tensor(targets, dtype=float)).item()
 
     # function for calculating perturbation updates
     def perturb(self, rng, inputs, targets, noise=1.0):
@@ -394,7 +410,7 @@ class MLP(object):
                 targets = labels[:, batches[b, :]]
 
                 # calculate the current loss
-                losses[update_counter] = self.mse_loss(rng, batch_input, targets)
+                losses[update_counter] = self.cross_ent_loss(rng, batch_input, targets)
 
                 # update the weights
                 self.update(rng, batch_input, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
@@ -403,7 +419,7 @@ class MLP(object):
             # calculate the current test accuracy
             (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
-            test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
+            test_loss[epoch] = self.cross_ent_loss(rng, test_images, test_labels)
             hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
             bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
@@ -415,7 +431,8 @@ class MLP(object):
             # print an output message every report_rate epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
                 print("...completed ", (epoch + 1)/report_rate,
-                      " epochs of training. Current loss: ", round(losses[update_counter - 1], 2))
+                      " epochs of training. Current training loss: ", round(losses[update_counter - 1], 2),
+                      " epochs of training. Current testing loss: ", round(test_loss[epoch], 2) )
 
         # provide an output message
         if report:
@@ -465,7 +482,7 @@ class MLP(object):
         losses = np.zeros((num_epochs * (batches_2.shape[0]),)) # size of backprop vector
         accuracy = np.zeros((num_epochs,))
         test_loss = np.zeros((num_epochs,))
-        cosine_similarity = np.zeros((num_epochs,))
+        cosine_similarity = np.zeros((num_epochs,2))
 
         # estimate the gradient SNR on the test set
         grad1 = np.zeros((test_images.shape[1], *self.W_h_1.shape))
@@ -497,7 +514,7 @@ class MLP(object):
                 targets = labels[:, batches[b, :]]
 
                 # calculate the current loss
-                losses[update_counter] = self.mse_loss(rng, inputs, targets)
+                losses[update_counter] = self.cross_ent_loss(rng, inputs, targets)
 
                 # update the weights
                 self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
@@ -509,10 +526,14 @@ class MLP(object):
             # calculate the current test accuracy
             (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
-            test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
-            grad_test, _ , _= self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
-            grad_bp, _ , _= self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
-            cosine_similarity[epoch] = calculate_cosine_similarity(grad_test, grad_bp)
+            test_loss[epoch] = self.cross_ent_loss(rng, test_images, test_labels)
+            hid1, hid2 , _= self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
+            bphid1, bphid2, _= self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
+            
+            cos_sim_l1 = calculate_cosine_similarity(hid1, bphid1)
+            cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
+
+            cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
 
             # print an output message every 10 epochs
             if report and np.mod(epoch + 1, report_rate) == 0:
@@ -547,6 +568,7 @@ class MLP(object):
         if report:
             print("Training starting...")
 
+        running_losses = []
         losses = []
         accuracy = []
         test_loss = []
@@ -570,16 +592,18 @@ class MLP(object):
             targets = labels[:, [t]]
 
             # calculate the current loss
-            loss = self.mse_loss(rng, inputs, targets)
-
+            loss = self.cross_ent_loss(rng, inputs, targets)
+            running_losses.append(loss)
+            
             # store the loss every report_rate samples, should be batchsize to be comparable to other methods
             if update_counter % report_rate == 0:
-                losses.append(loss)  
-
+                losses.append(sum(running_losses) / len(running_losses))  
+                running_losses = []
+                
                 # calculate the current test accuracy
                 (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
-                test_loss.append(self.mse_loss(rng, test_images, test_labels))
+                test_loss.append(self.cross_ent_loss(rng, test_images, test_labels))
                 hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
                 bphid1, bphid2, _ = self.return_grad(rng, test_images, test_labels, algorithm='backprop', eta=0., noise=noise)
 
@@ -587,18 +611,20 @@ class MLP(object):
                 cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
 
                 cosine_similarity.append([cos_sim_l1, cos_sim_l2])
+                print(f"At iteration {update_counter + 1}, the accuracy is {accuracy[-1]}")
 
             # print an output message every 100 iterations
-            if report and np.mod(update_counter+1, images.shape[1]) == 0: # report_rate*10
+            if report and np.mod(update_counter+1, images.shape[1] // 10) == 0: # report_rate*10
                 print("...completed ", (update_counter + 1),
                         " iterations (corresponding to 1 epoch) of training data (single images). Current loss: ", round(losses[-1], 4), ".")
 
             # check for convergence
-            if sum(losses[-10:]) < conv_loss:
-                converged = True
-                losses.append(loss)  
-                print("...completed ", (update_counter + 1),
-                        " iterations of training data (single images). Current loss: ", round(losses[-1], 4))
+            if update_counter > report_rate:
+                if losses[-1] < conv_loss:
+                    converged = True
+                    losses.append(loss)  
+                    print("...completed ", (update_counter + 1),
+                            " iterations of training data (single images). Current loss: ", round(losses[-1], 2))
 
             # update the weights
             self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
@@ -625,8 +651,8 @@ class NodePerturbMLP(MLP):
         hidden1, hidden2, output = self.inference(rng, inputs)
         hidden1_p, hidden2_p, output_p = self.inference(rng, inputs, noise=noise)
 
-        loss_now = self.mse_loss_batch(rng, inputs, targets, output=output)
-        loss_per = self.mse_loss_batch(rng, inputs, targets, output=output_p)
+        loss_now = self.cross_ent_loss(rng, inputs, targets, output=output)
+        loss_per = self.cross_ent_loss(rng, inputs, targets, output=output_p)
         delta_loss = loss_now - loss_per
 
         hidden1_update = np.mean(
