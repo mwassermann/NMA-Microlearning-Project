@@ -503,7 +503,7 @@ class MLP(object):
                     break
 
             # calculate the current test accuracy
-            (testhid, testout) = self.inference(rng, test_images)
+            (testhid1, testhid2, testout) = self.inference(rng, test_images)
             accuracy[epoch] = calculate_accuracy(testout, test_labels)
             test_loss[epoch] = self.mse_loss(rng, test_images, test_labels)
             grad_test, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
@@ -571,7 +571,7 @@ class MLP(object):
                 losses.append(loss)  
 
                 # calculate the current test accuracy
-                (testhid, testout) = self.inference(rng, test_images)
+                (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
                 test_loss.append(self.mse_loss(rng, test_images, test_labels))
                 hid1, hid2, _ = self.return_grad(rng, test_images, test_labels, algorithm=algorithm, eta=0., noise=noise)
