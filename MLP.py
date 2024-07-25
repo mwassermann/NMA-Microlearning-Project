@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 import torch
+import torch.nn as nn
 import torchvision
 import contextlib
 import io
@@ -184,6 +185,15 @@ class MLP(object):
         Calculate the mean-squared error loss on the given targets (average over the batch)
         """
         return np.mean(self.mse_loss_batch(rng, inputs, targets, W_h=W_h, W_y=W_y, output=output))
+    
+    def cross_ent_loss(self, rng, inputs, targets):
+        """
+        Calculate the cross entropy loss on the given targets
+        """
+        criterion = nn.CrossEntropyLoss()
+        (hidden1, hidden2, output) = self.inference(rng, inputs)
+
+        return criterion(output, targets)
 
     # function for calculating perturbation updates
     def perturb(self, rng, inputs, targets, noise=1.0):
