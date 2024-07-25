@@ -95,10 +95,16 @@ class net_FF_model:
                    model='ff_com', return_loss='cross_entropy'):
 
         running_real_losses = []
-        running_return_losses = []
         real_losses = []
-        return_losses = []
-        test_losses = []
+        
+        running_ce_losses = []
+        ce_losses = []
+        
+        running_mse_losses = []
+        mse_losses = []
+        
+        test_ce_losses = []
+        test_mse_losses = []
         test_accuracies = []
         
         batches = helpers.create_batches(self.rng, batch_size, train_images.shape[1])
@@ -114,27 +120,36 @@ class net_FF_model:
                 running_real_losses.append(
                     self.train_batch(inputs, labels, model)
                 )
-                running_return_losses.append(
-                    self._get_inference_loss(inputs, labels, model, return_loss)
+                running_ce_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'cross_entropy')
                 )
+                running_mse_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'mse')
+                )
+                
+                
             real_losses.append(np.mean(running_real_losses))
-            return_losses.append(np.mean(running_return_losses))
+            ce_losses.append(np.mean(running_ce_losses))
+            mse_losses.append(np.mean(running_mse_losses))
 
             # accuracy and loss in the testing data
-            test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
-            test_losses.append(test_loss)
+            test_accuracy, test_ce_loss, test_mse_loss = self.test(test_images, test_targets, model, return_loss)
+            test_ce_losses.append(test_ce_loss)
+            test_mse_losses.append(test_mse_loss)
             test_accuracies.append(test_accuracy)
 
             
             # report
             print(f'''...completed  {epoch}  epochs of training. \n
             Current innate loss:  {real_losses[epoch]}, \n
-            Current training {return_loss} loss:  {return_losses[epoch]}, \n
-            Current testing {return_loss} loss:  {test_losses[epoch]}, \n   
+            Current training {return_loss} loss:  {ce_losses[epoch]}, \n
+            Current testing {return_loss} loss:  {test_ce_losses[epoch]}, \n   
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
-        return running_return_losses, test_losses, test_accuracies
+        return (running_ce_losses, test_ce_losses, 
+                running_mse_losses, test_mse_losses,
+                test_accuracies)
 
     def train_online(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -145,10 +160,16 @@ class net_FF_model:
             param_group['lr'] = lr
         
         running_real_losses = []
-        running_return_losses = []
-        return_losses = []
-        real_losses = [] 
-        test_losses = []
+        real_losses = []
+        
+        running_ce_losses = []
+        ce_losses = []
+        
+        running_mse_losses = []
+        mse_losses = []
+        
+        test_ce_losses = []
+        test_mse_losses = []
         test_accuracies = []
         
         self.mlp[model].train()
@@ -161,46 +182,60 @@ class net_FF_model:
         while not converged and update_counter < max_it:
             # training ...
             t = self.rng.integers(train_images.shape[0])
+            t_ = self.rng.integers(train_images.shape[0])
+            
             inputs, labels = self._input_conversion(
                 train_images[t].unsqueeze(0), 
                 train_targets[t].unsqueeze(0), 
                 model
             )
-            
             running_real_losses.append(
                 self.train_batch(inputs, labels, model)
             )
-            running_return_losses.append(
-                self._get_inference_loss(inputs, labels, model, return_loss)
+            
+            inputs, labels = self._input_conversion(
+                train_images[t_].unsqueeze(0), 
+                train_targets[t_].unsqueeze(0), 
+                model
             )
-
+            running_ce_losses.append(
+                self._get_inference_loss(inputs, labels, model, 'cross_entropy')
+            )
+            running_mse_losses.append(
+                self._get_inference_loss(inputs, labels, model, 'mse')
+            )
+            
+            
             # accuracy and loss in the testing data
             if update_counter % (report_rate) == 0:
                 real_losses.append(sum(running_real_losses) / len(running_real_losses))
-                return_losses.append(sum(running_return_losses) / len(running_return_losses))
-                running_real_losses = []
-                running_return_losses = []
+                ce_losses.append(sum(running_ce_losses) / len(running_ce_losses))
+                mse_losses.append(sum(running_mse_losses) / len(running_mse_losses))
                 
-                test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
-                test_losses.append(test_loss)
+                running_real_losses = []
+                running_ce_losses = []
+                
+                test_accuracy, test_ce_loss, test_mse_loss = self.test(test_images, test_targets, model, return_loss)
+                test_ce_losses.append(test_ce_loss)
+                test_mse_losses.append(test_mse_loss)
                 test_accuracies.append(test_accuracy)
 
-
-
-            if update_counter % (report_rate * 10) == 0:
-                # report
                 print(f'''...completed  {update_counter + 1}  iterations of training. \n
-                Current testing accuracy:  {np.mean(test_accuracies[-report_rate : -1])} \n
-                Current testing loss:  {np.mean(test_losses[-report_rate : -1])} \n ''')
-
-            if sum(return_losses) < conv_loss:
-                converged = True
-                # report
-                print(f'''...Converge at {update_counter + 1} iterations of training.''')
+                Current training {return_loss} loss:  {ce_losses[-1]}, \n
+                Current testing accuracy:  {test_accuracies[-1]} \n
+                Current testing loss:  {test_ce_losses[-1]} \n ''')
+                
+            if update_counter > 10 * report_rate:
+                if ce_losses[-1] < conv_loss:
+                    converged = True
+                    # report
+                    print(f'''...Converge at {update_counter + 1} iterations of training.''')
             
             update_counter += 1
             
-        return running_return_losses, test_losses, test_accuracies
+        return (ce_losses, test_ce_losses, 
+                mse_losses, test_mse_losses,
+                test_accuracies)
     
     def train_nonstationary(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -216,11 +251,18 @@ class net_FF_model:
 
         # prepare for training
         running_real_losses = []
-        running_return_losses = []
         real_losses = []
-        return_losses = []
-        test_losses = []
+        
+        running_ce_losses = []
+        ce_losses = []
+        
+        running_mse_losses = []
+        mse_losses = []
+        
+        test_ce_losses = []
+        test_mse_losses = []
         test_accuracies = []
+        
         first_half = 1
         
         # make batches from the data
@@ -245,30 +287,39 @@ class net_FF_model:
                 running_real_losses.append(
                     self.train_batch(inputs, labels, model)
                 )
-                running_return_losses.append(
-                    self._get_inference_loss(inputs, labels, model, return_loss)
+                running_ce_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'cross_entropy')
                 )
+                running_mse_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'mse')
+                )
+                
+                
             real_losses.append(np.mean(running_real_losses))
-            return_losses.append(np.mean(running_return_losses))
+            ce_losses.append(np.mean(running_ce_losses))
+            mse_losses.append(np.mean(running_mse_losses))
 
             # accuracy and loss in the testing data
-            test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
-            test_losses.append(test_loss)
+            test_accuracy, test_ce_loss, test_mse_loss = self.test(test_images, test_targets, model, return_loss)
+            test_ce_losses.append(test_ce_loss)
+            test_mse_losses.append(test_mse_loss)
             test_accuracies.append(test_accuracy)
 
             
             # report
             print(f'''...completed  {epoch}  epochs of training. \n
             Current innate loss:  {real_losses[epoch]}, \n
-            Current training {return_loss} loss:  {return_losses[epoch]}, \n
-            Current testing {return_loss} loss:  {test_losses[epoch]}, \n   
+            Current training {return_loss} loss:  {ce_losses[epoch]}, \n
+            Current testing {return_loss} loss:  {test_ce_losses[epoch]}, \n   
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
             if epoch == int(epochs // 2):
                 first_half = 0
             
-        return running_return_losses, test_losses, test_accuracies
+        return (running_ce_losses, test_ce_losses, 
+                running_mse_losses, test_mse_losses,
+                test_accuracies)
            
     def train_noisydata(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -277,13 +328,19 @@ class net_FF_model:
                    noise_type='gauss'):
 
         if noise_type in ['gauss', 's&p']:
-            inputs = self.alter_inputs(np.copy(train_images), noise_type)
+            train_images = self.alter_inputs(np.copy(train_images), noise_type)
         
         running_real_losses = []
-        running_return_losses = []
         real_losses = []
-        return_losses = []
-        test_losses = []
+        
+        running_ce_losses = []
+        ce_losses = []
+        
+        running_mse_losses = []
+        mse_losses = []
+        
+        test_ce_losses = []
+        test_mse_losses = []
         test_accuracies = []
         
         batches = helpers.create_batches(self.rng, batch_size, train_images.shape[1])
@@ -299,27 +356,36 @@ class net_FF_model:
                 running_real_losses.append(
                     self.train_batch(inputs, labels, model)
                 )
-                running_return_losses.append(
-                    self._get_inference_loss(inputs, labels, model, return_loss)
+                running_ce_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'cross_entropy')
                 )
+                running_mse_losses.append(
+                    self._get_inference_loss(inputs, labels, model, 'mse')
+                )
+                
+                
             real_losses.append(np.mean(running_real_losses))
-            return_losses.append(np.mean(running_return_losses))
+            ce_losses.append(np.mean(running_ce_losses))
+            mse_losses.append(np.mean(running_mse_losses))
 
             # accuracy and loss in the testing data
-            test_accuracy, test_loss = self.test(test_images, test_targets, model, return_loss)
-            test_losses.append(test_loss)
+            test_accuracy, test_ce_loss, test_mse_loss = self.test(test_images, test_targets, model, return_loss)
+            test_ce_losses.append(test_ce_loss)
+            test_mse_losses.append(test_mse_loss)
             test_accuracies.append(test_accuracy)
 
             
             # report
             print(f'''...completed  {epoch}  epochs of training. \n
             Current innate loss:  {real_losses[epoch]}, \n
-            Current training {return_loss} loss:  {return_losses[epoch]}, \n
-            Current testing {return_loss} loss:  {test_losses[epoch]}, \n   
+            Current training {return_loss} loss:  {ce_losses[epoch]}, \n
+            Current testing {return_loss} loss:  {test_ce_losses[epoch]}, \n   
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
-        return running_return_losses, test_losses, test_accuracies
+        return (running_ce_losses, test_ce_losses, 
+                running_mse_losses, test_mse_losses,
+                test_accuracies)
 
     
     def train_batch(self, inputs, labels, model='ff_com', return_loss='cross_entropy'):
@@ -338,7 +404,8 @@ class net_FF_model:
         total_samples = 0
         accuracy = 0
         
-        testing_loss = 0
+        testing_loss_ce = 0
+        testing_loss_mse = 0
         
         self.mlp[model].eval()
         with torch.no_grad():
@@ -350,8 +417,11 @@ class net_FF_model:
             total_samples += inputs['neutral_sample'].shape[0]
             accuracy = correct_samples / total_samples
 
-            testing_loss = self._get_inference_loss(inputs, labels, model, return_loss)
-        return accuracy, testing_loss
+            testing_loss_ce = self._get_inference_loss(inputs, labels, model, 'cross_entropy')
+            testing_loss_mse = self._get_inference_loss(inputs, labels, model, 'mse')
+            
+            
+        return accuracy, testing_loss_ce, testing_loss_mse
         
 
 
