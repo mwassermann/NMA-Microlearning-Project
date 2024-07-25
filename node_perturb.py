@@ -115,7 +115,7 @@ def node_perturb_normal(rng, numhidden, batchsize, initweight, learnrate, noise,
   data = [losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr_node_perturb, cosine_similarity_node_perturb]
 
   for i, df in enumerate(data):
-    df.tofile(f"data/node_perturb/{filenames[i]}.csv", sep=",")
+    df.tofile(f"data/node_perturb/normal/{filenames[i]}.csv", sep=",")
   
   return
 
@@ -124,10 +124,25 @@ def node_perturb_online():
   # Online Learning
   with contextlib.redirect_stdout(io.StringIO()):
     netnodeperturb_online = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
-    (losses_np_online, accuracy_np_online, test_loss_np_online, _) = \
+    (losses_np_online, accuracy_np_online, test_loss_np_online, snr_np_online, cos_sim_np_online) = \
         netnodeperturb_online.train_online(rng_bp2, train_images, train_labels, test_images[:, indices], test_labels[:, indices], \
                       learning_rate=0.01, max_it=numupdates*batchsize, conv_loss = 1e-4, algorithm='node_perturb', noise=noise, \
                       report=report, report_rate=batchsize)
+    
+
+  # save the weights and params
+  torch.save(netnodeperturb_online.state_dict(), "node_perturb_model.pt")
+
+  # to load the weights and params, in the main doc:
+  # netnodeperturb = MLP()
+  # netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
+
+  # save the dfs as csv
+  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
+  data = [losses_np_online, accuracy_np_online, test_loss_np_online, snr_np_online, cos_sim_np_online]
+
+  for i, df in enumerate(data):
+    df.tofile(f"data/node_perturb/online/{filenames[i]}.csv", sep=",")
 
   return
 
@@ -136,10 +151,24 @@ def node_perturb_noisy():
   # Noisy Input
   with contextlib.redirect_stdout(io.StringIO()):
     nodeperturb_noisy = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
-    (losses_np_noisy, accuracy_np_noisy, test_loss_np_noisy, _) = \
+    (losses_np_noisy, accuracy_np_noisy, test_loss_np_noisy, snr_np_noisy, cos_sim_np_noisy) = \
         nodeperturb_noisy.train(rng_bp2, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
                         learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
                         noise_type='gauss',report=report, report_rate=rep_rate)
+    
+  # save the weights and params
+  torch.save(nodeperturb_noisy.state_dict(), "node_perturb_model.pt")
+
+  # to load the weights and params, in the main doc:
+  # netnodeperturb = MLP()
+  # netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
+
+  # save the dfs as csv
+  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
+  data = [losses_np_noisy, accuracy_np_noisy, test_loss_np_noisy, snr_np_noisy, cos_sim_np_noisy]
+
+  for i, df in enumerate(data):
+    df.tofile(f"data/node_perturb/noisy/{filenames[i]}.csv", sep=",")
 
   return
 
@@ -148,19 +177,30 @@ def node_perturb_non_stat():
   # Non-Stationary Data
   with contextlib.redirect_stdout(io.StringIO()):
     nodeperturb_nonstat = NodePerturbMLP(rng_bp2, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
-    (losses_np_nonstat, accuracy_np_nonstat, test_loss_np_nonstat, _) = \
+    (losses_np_nonstat, accuracy_np_nonstat, test_loss_np_nonstat, snr_np_non_stat, cos_sim_np_non_stat) = \
         nodeperturb_nonstat.train_nonstat_data(rng_bp2, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
                         learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
                         report=report, report_rate=1)
+    
+  # save the weights and params
+  torch.save(nodeperturb_nonstat.state_dict(), "node_perturb_model.pt")
+
+  # to load the weights and params, in the main doc:
+  # netnodeperturb = MLP()
+  # netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
+
+  # save the dfs as csv
+  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
+  data = [losses_np_nonstat, accuracy_np_nonstat, test_loss_np_nonstat, snr_np_non_stat, cos_sim_np_non_stat]
+
+  for i, df in enumerate(data):
+    df.tofile(f"data/node_perturb/nonstat/{filenames[i]}.csv", sep=",")
 
   return
-
 
 def main():
   # Create a CLI Parser:
   parser = argparse.ArgumentParser(description="Specify which Node Perturbation Nets to run", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-  parser.add_argument('nets', type=str, metavar='N', nargs="+", help = "which learning scenarios to train node perturbation networks in")
 
   parser.add_argument("-t", "--test", action="store_true", help ="train the network in test conditions")
   parser.add_argument("-n", "--normal", action="store_true", help="train the  network in normal conditions")
@@ -214,11 +254,7 @@ def main():
 
   if args["non-stat"]:
     # create a network and train it using node perturbation in non-stationary conditions
-    c = 0
-
-
-
-  
+    c = 0 
 
 if __name__ == "__main__":
   main()
