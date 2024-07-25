@@ -466,7 +466,7 @@ class MLP(object):
         cosine_similarity = np.zeros((num_epochs,))
 
         # estimate the gradient SNR on the test set
-        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape, *self.W_h_2.shape))
+        grad = np.zeros((test_images.shape[1], *self.W_h_1.shape))
         for t in range(test_images.shape[1]):
             inputs = test_images[:, [t]]
             targets = test_labels[:, [t]]
