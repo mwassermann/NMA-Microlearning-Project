@@ -651,8 +651,8 @@ class NodePerturbMLP(MLP):
         hidden1, hidden2, output = self.inference(rng, inputs)
         hidden1_p, hidden2_p, output_p = self.inference(rng, inputs, noise=noise)
 
-        loss_now = self.cross_ent_loss(rng, inputs, targets, output=output)
-        loss_per = self.cross_ent_loss(rng, inputs, targets, output=output_p)
+        loss_now = self.cross_ent_loss(rng, inputs, targets)
+        loss_per = self.cross_ent_loss(rng, inputs, targets)
         delta_loss = loss_now - loss_per
 
         hidden1_update = np.mean(
