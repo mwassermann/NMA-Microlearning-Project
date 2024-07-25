@@ -98,7 +98,7 @@ def node_perturb_test(train_images, train_labels, test_images, test_labels, indi
 def node_perturb_normal(rng, numhidden, batchsize, initweight, learnrate, noise, numepochs, activation, report, rep_rate, train_images, train_labels, test_images, test_labels, indices):
   with contextlib.redirect_stdout(io.StringIO()):
     netnodeperturb = NodePerturbMLP(rng, numhidden, num_inputs = 784, sigma=initweight, activation=activation)
-    (losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr_node_perturb, cosine_similarity_node_perturb) = \
+    (losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr1_node_perturb, snr2_node_perturb, cosine_similarity_node_perturb) = \
         netnodeperturb.train(rng, train_images, train_labels, numepochs, test_images[:, indices], test_labels[:, indices], \
                             learning_rate=learnrate, batch_size=batchsize, algorithm='node_perturb', noise=noise, \
                             report=report, report_rate=rep_rate)
@@ -114,8 +114,8 @@ def node_perturb_normal(rng, numhidden, batchsize, initweight, learnrate, noise,
   # netnodeperturb.load_state_dict(torch.load('mlp_model.pt'))
 
   # save the dfs as csv
-  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr_node_perturb", "cosine_similarity_node_perturb"]
-  data = [losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr_node_perturb, cosine_similarity_node_perturb]
+  filenames= ["losses_node_perturb", "accuracy_node_perturb", "test_losses_node_perturb", "snr1_node_perturb", "snr2_node_perturb", "cosine_similarity_node_perturb"]
+  data = [losses_node_perturb, accuracy_node_perturb, test_losses_node_perturb, snr1_node_perturb, snr2_node_perturb, cosine_similarity_node_perturb]
 
   for i, df in enumerate(data):
     df.tofile(f"data/node_perturb/normal/{filenames[i]}.csv", sep=",")
