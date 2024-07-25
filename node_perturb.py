@@ -213,7 +213,7 @@ Detailed instructions for running node perturb networks:
 - Make sure your correct venv is activated in your terminal
 - Run `python node_perturb.py --your_condition_here` in that terminal.
 - The network should now be training, and depending on your machine, should take between 1.5 (for normal conditions) to idk-maybe-4 (for online learning).""",
-                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+                                    formatter_class=argparse.RawDescriptionHelpFormatter)
 
   parser.add_argument("-t", "--test", action="store_true", help ="train the network in test conditions")
   parser.add_argument("-n", "--normal", action="store_true", help="train the  network in normal conditions")
