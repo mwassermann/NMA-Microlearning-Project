@@ -134,7 +134,7 @@ class net_FF_model:
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
-        return return_losses, test_losses, test_accuracies
+        return running_return_losses, test_losses, test_accuracies
 
     def train_online(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -193,7 +193,7 @@ class net_FF_model:
             
             update_counter += 1
             
-        return return_losses, test_losses, test_accuracies
+        return running_return_losses, test_losses, test_accuracies
     
     def train_nonstationary(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -261,7 +261,7 @@ class net_FF_model:
             if epoch == int(epochs // 2):
                 first_half = 0
             
-        return return_losses, test_losses, test_accuracies
+        return running_return_losses, test_losses, test_accuracies
            
     def train_noisydata(self, train_images, train_targets, 
                    test_images, test_targets,
@@ -312,7 +312,7 @@ class net_FF_model:
             Current testing accuracy:  {test_accuracies[epoch]} \n         
             ''')
             
-        return return_losses, test_losses, test_accuracies
+        return running_return_losses, test_losses, test_accuracies
 
     
     def train_batch(self, inputs, labels, model='ff_com', return_loss='cross_entropy'):

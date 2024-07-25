@@ -195,8 +195,11 @@ class MLP(object):
         """
         criterion = nn.CrossEntropyLoss()
         (hidden1, hidden2, preds) = self.inference(rng, inputs)
-
-        return criterion(torch.as_tensor(preds, dtype=float), torch.as_tensor(targets, dtype=float))
+        
+        preds = preds.transpose()
+        targets = targets.transpose()
+        
+        return criterion(torch.as_tensor(preds, dtype=float), torch.as_tensor(targets, dtype=float)).item()
 
     # function for calculating perturbation updates
     def perturb(self, rng, inputs, targets, noise=1.0):
@@ -424,8 +427,8 @@ class MLP(object):
             cosine_similarity[epoch, :] = [cos_sim_l1, cos_sim_l2]
   
             # print an output message every report_rate epochs
-            # if report and np.mod(epoch + 1, report_rate) == 0:
-            print("...completed ", (epoch + 1)/report_rate,
+            if report and np.mod(epoch + 1, report_rate) == 0:
+                print("...completed ", (epoch + 1)/report_rate,
                       " epochs of training. Current training loss: ", round(losses[update_counter - 1], 2),
                       " epochs of training. Current testing loss: ", round(test_loss[epoch], 2) )
 
@@ -557,6 +560,7 @@ class MLP(object):
         if report:
             print("Training starting...")
 
+        running_losses = []
         losses = []
         accuracy = []
         test_loss = []
@@ -579,11 +583,13 @@ class MLP(object):
 
             # calculate the current loss
             loss = self.cross_ent_loss(rng, inputs, targets)
-
+            running_losses.append(loss)
+            
             # store the loss every report_rate samples, should be batchsize to be comparable to other methods
             if update_counter % report_rate == 0:
-                losses.append(loss)  
-
+                losses.append(sum(running_losses) / len(running_losses))  
+                running_losses = []
+                
                 # calculate the current test accuracy
                 (testhid1, testhid2, testout) = self.inference(rng, test_images)
                 accuracy.append(calculate_accuracy(testout, test_labels))
@@ -595,18 +601,20 @@ class MLP(object):
                 cos_sim_l2 = calculate_cosine_similarity(hid2, bphid2)
 
                 cosine_similarity.append([cos_sim_l1, cos_sim_l2])
+                print(f"At iteration {update_counter + 1}, the accuracy is {accuracy[-1]}")
 
             # print an output message every 100 iterations
-            if report and np.mod(update_counter+1, images.shape[1]) == 0: # report_rate*10
+            if report and np.mod(update_counter+1, images.shape[1] // 10) == 0: # report_rate*10
                 print("...completed ", (update_counter + 1),
                         " iterations (corresponding to 1 epoch) of training data (single images). Current loss: ", round(losses[-1], 4), ".")
 
             # check for convergence
-            if sum(losses[-10:]) < conv_loss:
-                converged = True
-                losses.append(loss)  
-                print("...completed ", (update_counter + 1),
-                        " iterations of training data (single images). Current loss: ", round(losses[-1], 4))
+            if update_counter > report_rate:
+                if losses[-1] < conv_loss:
+                    converged = True
+                    losses.append(loss)  
+                    print("...completed ", (update_counter + 1),
+                            " iterations of training data (single images). Current loss: ", round(losses[-1], 2))
 
             # update the weights
             self.update(rng, inputs, targets, eta=learning_rate, algorithm=algorithm, noise=noise)
