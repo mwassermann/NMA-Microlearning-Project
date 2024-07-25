@@ -147,6 +147,8 @@ class FF_model(torch.nn.Module):
 
         output = self.linear_classifier(input_classification_model.detach())
         output = output - torch.max(output, dim=-1, keepdim=True)[0]
+        scalar_outputs["prediction"] = output
+        
         classification_loss = self.classification_loss(output, labels["class_labels"])
         classification_accuracy = utils.get_accuracy(
             self.opt, output.data, labels["class_labels"]
@@ -155,7 +157,7 @@ class FF_model(torch.nn.Module):
         scalar_outputs["Loss"] += classification_loss
         scalar_outputs["classification_loss"] = classification_loss
         scalar_outputs["classification_accuracy"] = classification_accuracy
-        scalar_outputs["prediction"] = output
+        
         return scalar_outputs
 
 
