@@ -393,6 +393,7 @@ class MLP(object):
             grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr1 = calculate_grad_snr(grad1)
         snr2 = calculate_grad_snr(grad2)
+        snr = [snr1, snr2]
 
         if noise_type in ['gauss', 's&p']:
             inputs = self.alter_inputs(np.copy(images), noise_type)
@@ -438,7 +439,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 
     def train_nonstat_data(self, rng, images, labels, num_epochs, test_images, test_labels, learning_rate=0.01, batch_size=20, \
@@ -493,6 +494,7 @@ class MLP(object):
             grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr1 = calculate_grad_snr(grad1)
         snr2 = calculate_grad_snr(grad2)
+        snr = [snr1, snr2]
 
         # run the training for the given number of epochs
         update_counter = 0
@@ -548,7 +550,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 
     def train_online(self, rng, images, labels, test_images, test_labels, learning_rate=0.01, max_it=None, conv_loss = 5e-2, algorithm='backprop', noise=1.0, report=False, report_rate=100):
@@ -583,6 +585,7 @@ class MLP(object):
             grad1[t, ...], grad2[t, ...], _ = self.return_grad(rng, inputs, targets, algorithm=algorithm, eta=0., noise=noise)
         snr1 = calculate_grad_snr(grad1)
         snr2 = calculate_grad_snr(grad2)
+        snr = [snr1, snr2]
 
         converged = False
         update_counter = 0
@@ -635,7 +638,7 @@ class MLP(object):
         if report:
             print("Training complete.")
 
-        return (losses, accuracy, test_loss, snr1, snr2, cosine_similarity)
+        return (losses, accuracy, test_loss, snr, cosine_similarity)
     
 class NodePerturbMLP(MLP):
     """
